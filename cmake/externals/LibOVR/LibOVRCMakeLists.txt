@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.2)
+project(LibOVR)
+
+set(LIBOVR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/LibOVR")
+include_directories(${LIBOVR_DIR}/Include ${LIBOVR_DIR}/Src)
+file(GLOB HEADER_FILES ${LIBOVR_DIR}/Include/*.h)
+file(GLOB EXTRA_HEADER_FILES ${LIBOVR_DIR}/Include/Extras/*.h)  
+file(GLOB_RECURSE SOURCE_FILES ${LIBOVR_DIR}/Shim/*.c ${LIBOVR_DIR}/Shim/*.cpp)
+message("XXX ${LIBOVR_DIR} ${SOURCE_FILES} XXX")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DOVR_BUILD_DEBUG")
+add_library(LibOVR STATIC ${SOURCE_FILES} ${HEADER_FILES} ${EXTRA_HEADER_FILES})
+set_target_properties(LibOVR PROPERTIES DEBUG_POSTFIX "d")
+
+install(TARGETS LibOVR DESTINATION Lib)
+install(FILES ${HEADER_FILES} DESTINATION Include)
+install(FILES ${EXTRA_HEADER_FILES} DESTINATION Include/Extras)
