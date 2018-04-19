@@ -16,133 +16,123 @@
 #include <Eigen/Geometry>
 #include <vector>
 #include <string>
+#include <memory>
+
+namespace cmod {
+
+using VertexData = std::vector<uint8_t>;
+using VertexDataPointer = std::shared_ptr<VertexData>;
+
+using IndexData = std::vector<uint32_t>;
+using IndexDataPointer = std::shared_ptr<IndexData>;
 
 
-namespace cmod
-{
-
-class Mesh
-{
- public:
+class Mesh {
+public:
+    using Pointer = std::shared_ptr<Mesh>;
     // 32-bit index type
-    typedef unsigned int index32;
-    class BufferResource
-    {
+    typedef uint32_t index32;
+    class BufferResource {
+    public:
+        using Pointer = std::shared_ptr<BufferResource>;
     };
 
     enum VertexAttributeSemantic
     {
-        Position     = 0,
-        Color0       = 1,
-        Color1       = 2,
-        Normal       = 3,
-        Tangent      = 4,
-        Texture0     = 5,
-        Texture1     = 6,
-        Texture2     = 7,
-        Texture3     = 8,
-        PointSize    = 9,
-        SemanticMax  = 10,
-        InvalidSemantic  = -1,
+        Position = 0,
+        Color0 = 1,
+        Color1 = 2,
+        Normal = 3,
+        Tangent = 4,
+        Texture0 = 5,
+        Texture1 = 6,
+        Texture2 = 7,
+        Texture3 = 8,
+        PointSize = 9,
+        SemanticMax = 10,
+        InvalidSemantic = -1,
     };
 
     enum VertexAttributeFormat
     {
-        Float1    = 0,
-        Float2    = 1,
-        Float3    = 2,
-        Float4    = 3,
-        UByte4    = 4,
+        Float1 = 0,
+        Float2 = 1,
+        Float3 = 2,
+        Float4 = 3,
+        UByte4 = 4,
         FormatMax = 5,
         InvalidFormat = -1,
     };
 
-    struct VertexAttribute
-    {
-        VertexAttribute() :
-            semantic(InvalidSemantic),
-            format(InvalidFormat),
-            offset(0)
-        {
-        }
+    struct VertexAttribute {
+        VertexAttribute() : semantic(InvalidSemantic), format(InvalidFormat), offset(0) {}
 
-        VertexAttribute(VertexAttributeSemantic _semantic,
-                        VertexAttributeFormat _format,
-                        unsigned int _offset) :
-            semantic(_semantic),
-            format(_format),
-            offset(_offset)
-        {
-        }
+        VertexAttribute(VertexAttributeSemantic _semantic, VertexAttributeFormat _format, unsigned int _offset) :
+            semantic(_semantic), format(_format), offset(_offset) {}
 
         VertexAttributeSemantic semantic;
-        VertexAttributeFormat   format;
-        unsigned int            offset;
+        VertexAttributeFormat format;
+        unsigned int offset;
     };
 
-    struct VertexDescription
-    {
-        VertexDescription(unsigned int _stride,
-                          unsigned int _nAttributes,
-                          VertexAttribute* _attributes);
+    using VertexAttributes = std::vector<VertexAttribute>;
+
+    struct VertexDescription {
+        using Pointer = std::shared_ptr<VertexDescription>;
+        VertexDescription(unsigned int _stride, const VertexAttributes& _attributes);
         VertexDescription(const VertexDescription& desc);
         ~VertexDescription();
 
-        const VertexAttribute& getAttribute(VertexAttributeSemantic semantic) const
-        {
-            return semanticMap[semantic];
-        }
+        const VertexAttribute& getAttribute(VertexAttributeSemantic semantic) const { return semanticMap[semantic]; }
 
         bool validate() const;
 
         VertexDescription& operator=(const VertexDescription&);
 
-        unsigned int stride;
-        unsigned int nAttributes;
-        VertexAttribute* attributes;
+        unsigned int stride{ 0 };
+        VertexAttributes attributes;
 
     private:
         void clearSemanticMap();
         void buildSemanticMap();
-        
+
         // Vertex attributes indexed by semantic
-        VertexAttribute semanticMap[SemanticMax];
+        std::array<VertexAttribute, SemanticMax> semanticMap;
     };
 
     enum PrimitiveGroupType
     {
-        TriList    = 0,
-        TriStrip   = 1,
-        TriFan     = 2,
-        LineList   = 3,
-        LineStrip  = 4,
-        PointList  = 5,
+        TriList = 0,
+        TriStrip = 1,
+        TriFan = 2,
+        LineList = 3,
+        LineStrip = 4,
+        PointList = 5,
         SpriteList = 6,
         PrimitiveTypeMax = 7,
         InvalidPrimitiveGroupType = -1
     };
 
-    class PrimitiveGroup
-    {
+    class PrimitiveGroup {
     public:
+        using Pointer = std::shared_ptr<PrimitiveGroup>;
+        using ConstPointer = std::shared_ptr<const PrimitiveGroup>;
         PrimitiveGroup();
         ~PrimitiveGroup();
 
         unsigned int getPrimitiveCount() const;
-        
+
         PrimitiveGroupType prim;
         unsigned int materialIndex;
-        index32* indices;
-        unsigned int nIndices;
+        IndexData indices;
     };
 
-    class PickResult
-    {
+    class PickResult {
     public:
         PickResult();
 
-        Mesh* mesh;
-        PrimitiveGroup* group;
+        Mesh::Pointer mesh;
+        PrimitiveGroup::Pointer group;
         unsigned int primitiveIndex;
         double distance;
     };
@@ -150,17 +140,15 @@ class Mesh
     Mesh();
     ~Mesh();
 
-    void setVertices(unsigned int _nVertices, void* vertexData);
+    void setVertices(unsigned int _nVertices, const VertexDataPointer& vertexData);
     bool setVertexDescription(const VertexDescription& desc);
     const VertexDescription& getVertexDescription() const;
 
-    const PrimitiveGroup* getGroup(unsigned int index) const;
-    PrimitiveGroup* getGroup(unsigned int index);
-    unsigned int addGroup(PrimitiveGroup* group);
-    unsigned int addGroup(PrimitiveGroupType prim,
-                          unsigned int materialIndex,
-                          unsigned int nIndices,
-                          index32* indices);
+    PrimitiveGroup::ConstPointer getGroup(unsigned int index) const;
+    PrimitiveGroup::Pointer getGroup(unsigned int index);
+    unsigned int addGroup(const PrimitiveGroup::Pointer& group);
+    unsigned int addGroup(PrimitiveGroupType prim, unsigned int materialIndex, IndexData& indices);
+    unsigned int addGroup(PrimitiveGroupType prim, unsigned int materialIndex, const IndexData& indices);
     unsigned int getGroupCount() const;
     void remapIndices(const std::vector<index32>& indexMap);
     void clearGroups();
@@ -176,39 +164,37 @@ class Mesh
     const std::string& getName() const;
     void setName(const std::string&);
 
-    bool pick(const Eigen::Vector3d& origin, const Eigen::Vector3d& direction, PickResult* result) const;
+    bool pick(const Eigen::Vector3d& origin, const Eigen::Vector3d& direction, PickResult& result) const;
     bool pick(const Eigen::Vector3d& origin, const Eigen::Vector3d& direction, double& distance) const;
 
     Eigen::AlignedBox<float, 3> getBoundingBox() const;
     void transform(const Eigen::Vector3f& translation, float scale);
 
-    const void* getVertexData() const { return vertices; }
+    const void* getVertexData() const { return vertices->data(); }
     unsigned int getVertexCount() const { return nVertices; }
     unsigned int getVertexStride() const { return vertexDesc.stride; }
     unsigned int getPrimitiveCount() const;
 
-    static PrimitiveGroupType        parsePrimitiveGroupType(const std::string&);
-    static VertexAttributeSemantic   parseVertexAttributeSemantic(const std::string&);
-    static VertexAttributeFormat     parseVertexAttributeFormat(const std::string&);
+    static PrimitiveGroupType parsePrimitiveGroupType(const std::string&);
+    static VertexAttributeSemantic parseVertexAttributeSemantic(const std::string&);
+    static VertexAttributeFormat parseVertexAttributeFormat(const std::string&);
     static Material::TextureSemantic parseTextureSemantic(const std::string&);
-    static unsigned int              getVertexAttributeSize(VertexAttributeFormat);
+    static unsigned int getVertexAttributeSize(VertexAttributeFormat);
 
- private:
+private:
     void recomputeBoundingBox();
 
- private:
+private:
     VertexDescription vertexDesc;
+    unsigned int nVertices{ 0 };
+    VertexDataPointer vertices;
+    mutable BufferResource::Pointer vbResource;
 
-    unsigned int nVertices;
-    void* vertices;
-    mutable BufferResource* vbResource;
-
-    std::vector<PrimitiveGroup*> groups;
+    std::vector<PrimitiveGroup::Pointer> groups;
 
     std::string name;
 };
 
-} // namespace cmod
+}  // namespace cmod
 
-#endif // !_CELMESH_MESH_H_
-
+#endif  // !_CELMESH_MESH_H_

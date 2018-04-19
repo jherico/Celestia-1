@@ -7,37 +7,18 @@
 // as published by the Free Software Foundation; either version 2
 // of the License, or (at your option) any later version.
 
-#ifndef _BASICTYPES_H_
-#define _BASICTYPES_H_
+#pragma once
 
-typedef unsigned int   uint;
+#include <cstdint>
+#include <limits>
 
 // Fixed size types
-typedef int            int32;
-typedef unsigned int   uint32;
-typedef short          int16;
-typedef unsigned short uint16;
-typedef char           int8;
-typedef unsigned char  uint8;
-
-#ifdef _MSC_VER
-// MS Visual C++ does not include stdint.h
-typedef __int64          int64;
-typedef unsigned __int64 uint64;
-#else
-#include <stdint.h>
-#include <limits>
-typedef          int64_t int64;
-typedef         uint64_t uint64;
-#ifndef INT64_MAX
-#define INT64_MAX 9223372036854775807LL
-#endif
-#ifndef UINT64_MAX
-#define UINT64_MAX 0xffffffffffffffffULL
-#endif
-//#define INT64_MAX  std::numeric_limits<int64_t>::max()
-//#define UINT64_MAX std::numeric_limits<uint64_t>::max()
-#endif
-
-#endif // _BASICTYPES_H_
-
+using uint = uint32_t;
+using int64 = int64_t;
+using uint64 = uint64_t;
+using int32 = int32_t;
+using uint32 = uint32_t;
+using int16 = int16_t;
+using uint16 = uint16_t;
+using int8 = int8_t;
+using uint8 = uint8_t;

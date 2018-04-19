@@ -12,10 +12,9 @@
 #define _CELMODEL_MODEL_H_
 
 #include "mesh.h"
+#include <array>
 
-
-namespace cmod
-{
+namespace cmod {
 
 /*!
  * Model is the standard geometry object in Celestia.  A Model
@@ -26,15 +25,15 @@ namespace cmod
  * structure is exactly the one used in Celestia model (.cmod)
  * files.
  */
-class Model
-{
- public:
+class Model {
+public:
+    using Pointer = std::shared_ptr<Model>;
     Model();
     ~Model();
 
-    const Material* getMaterial(unsigned int index) const;
-    void setMaterial(unsigned int index, const Material* material);
-    unsigned int addMaterial(const Material* material);
+    Material::Pointer getMaterial(unsigned int index) const;
+    void setMaterial(unsigned int index, const Material::Pointer& material);
+    unsigned int addMaterial(const Material::Pointer& material);
 
     /*! Return the number of materials in the model
      */
@@ -51,7 +50,7 @@ class Model
     /*! Return the mesh with the specified index, or NULL if the
      *  index is out of range.
      */
-    Mesh* getMesh(unsigned int index) const;
+    Mesh::Pointer getMesh(unsigned int index) const;
 
     /*! Return the total number of meshes withing the model.
      */
@@ -60,7 +59,7 @@ class Model
     /*! Add a new mesh to the model; the return value is the
      *  total number of meshes in the model.
      */
-    unsigned int addMesh(Mesh* mesh);
+    unsigned int addMesh(const Mesh::Pointer& mesh);
 
     /** Find the closest intersection between the ray (given
      *  by origin and direction) and the model. If the ray
@@ -69,18 +68,14 @@ class Model
      *  ignored, and the function just computes whether or
      *  not the ray intersected the model.
      */
-    bool pick(const Eigen::Vector3d& rayOrigin,
-              const Eigen::Vector3d& rayDirection,
-              Mesh::PickResult* result) const;
+    bool pick(const Eigen::Vector3d& rayOrigin, const Eigen::Vector3d& rayDirection, Mesh::PickResult& result) const;
 
     /** Find the closest intersection between the ray (given
      *  by origin and direction) and the model. If the ray
      *  intersects the model, return true and set distance;
      *  otherwise return false and leave distance unmodified.
      */
-    bool pick(const Eigen::Vector3d& rayOrigin,
-              const Eigen::Vector3d& rayDirection,
-              double& distance) const;    
+    bool pick(const Eigen::Vector3d& rayOrigin, const Eigen::Vector3d& rayDirection, double& distance) const;
 
     void transform(const Eigen::Vector3f& translation, float scale);
 
@@ -97,27 +92,14 @@ class Model
     virtual bool usesTextureType(Material::TextureSemantic) const;
 
     /** Return true if the model has no translucent components. */
-    virtual bool isOpaque() const
-    {
-        return opaque;
-    }
+    virtual bool isOpaque() const { return opaque; }
 
-    virtual bool isNormalized() const
-    {
-        return normalized;
-    }
+    virtual bool isNormalized() const { return normalized; }
 
     /*! Set the opacity flag based on material usage within the model */
     void determineOpacity();
 
-
-    class MeshComparator
-    {
-     public:
-        virtual ~MeshComparator() {};
-
-        virtual bool operator()(const Mesh&, const Mesh&) const = 0;
-    };
+    using MeshComparator = std::function<bool(const Mesh::Pointer&, const Mesh::Pointer&)>;
 
     /*! Sort the model's meshes in place. */
     void sortMeshes(const MeshComparator&);
@@ -125,6 +107,7 @@ class Model
     /*! Optimize the model by eliminating all duplicated materials */
     void uniquifyMaterials();
 
+#if 0
     /*! This comparator will roughly sort the model's meshes by
      *  opacity so that transparent meshes are rendered last.  It's far
      *  from perfect, but covers a lot of cases.  A better method of
@@ -138,27 +121,27 @@ class Model
      *  the opacity comparison depends on material indices being ordered
      *  by opacity.
      */
-    class OpacityComparator : public MeshComparator
-    {
-     public:
+    class OpacityComparator : public MeshComparator {
+    public:
         OpacityComparator();
-        virtual ~OpacityComparator() {};
+        virtual ~OpacityComparator(){};
 
         virtual bool operator()(const Mesh&, const Mesh&) const;
 
-     private:
+    private:
         int unused;
     };
+#endif
 
- private:
-    std::vector<const Material*> materials;
-    std::vector<Mesh*> meshes;
+private:
+    std::vector<Material::Pointer> materials;
+    std::vector<Mesh::Pointer> meshes;
 
-    bool textureUsage[Material::TextureSemanticMax];
-    bool opaque;
-    bool normalized;
+    std::array<bool, Material::TextureSemanticMax> textureUsage{ false, false, false, false };
+    bool opaque{ true };
+    bool normalized{ false };
 };
 
-} // namespace
+}  // namespace cmod
 
-#endif // !_CELMODEL_MODEL_H_
+#endif  // !_CELMODEL_MODEL_H_

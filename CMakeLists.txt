@@ -1,8 +1,7 @@
 cmake_minimum_required(VERSION 3.6 FATAL_ERROR)
 cmake_policy(VERSION 3.6)
 include("cmake/defaults.cmake")
-set(NAME VulkanCppExamples)
-
+set(NAME Celestia)
 
 project(${NAME})
 
@@ -47,13 +46,4 @@ else()
     link_libraries(${XCB_LIBRARIES})
 endif()
 
-add_subdirectory(base)
-
-include_directories(base)
-if (NOT WIN32)
-    set(THREADS_PREFER_PTHREAD_FLAG ON)
-    find_package(Threads REQUIRED)
-    link_libraries(${CMAKE_THREAD_LIBS_INIT})
-endif()
-
-add_subdirectory(examples)
+add_subdirectory(src)
