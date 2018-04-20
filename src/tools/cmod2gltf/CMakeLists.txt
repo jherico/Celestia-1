@@ -1,6 +1,0 @@
-set(TARGET_NAME cmod2gltf)
-add_executable(${TARGET_NAME} main.cpp)
-set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "tools")
-target_include_directories(${TARGET_NAME} PRIVATE ../..)
-target_eigen()
-target_link_libraries(${TARGET_NAME} celmodel celutil)

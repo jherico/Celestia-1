@@ -1,0 +1,5 @@
+set(TARGET_NAME testCore)
+add_executable(${TARGET_NAME} main.cpp)
+set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "tools")
+target_eigen()
+depend_libraries(celutil celmodel celephem celastro celengine celapp)
