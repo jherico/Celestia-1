@@ -11,17 +11,19 @@
 // of the License, or (at your option) any later version.
 
 #include "universe.h"
+
+#include <cassert>
+
 #include <celastro/astro.h>
-#include "asterism.h"
-#include "boundaries.h"
-#include "meshmanager.h"
-#include "timelinephase.h"
-#include "frametree.h"
-#include "render.h"
 #include <celmath/mathlib.h>
 #include <celmath/intersect.h>
 #include <celutil/utf8.h>
-#include <cassert>
+
+#include "asterism.h"
+#include "boundaries.h"
+#include "timelinephase.h"
+#include "frametree.h"
+#include "render.h"
 
 static const double ANGULAR_RES = 3.5e-6;
 
@@ -235,44 +237,20 @@ static bool ExactPlanetPickTraversal(const BodyPtr& body, void* info) {
     // Test for intersection with the bounding sphere
     if (body->isVisible() && body->extant(pickInfo->jd) && body->isClickable() &&
         testIntersection(pickInfo->pickRay, Sphered(bpos, radius), distance)) {
-        if (body->getGeometry() == InvalidResource) {
-            // There's no mesh, so the object is an ellipsoid.  If it's
-            // spherical, we've already done all the work we need to. Otherwise,
-            // we need to perform a ray-ellipsoid intersection test.
-            if (!body->isSphere()) {
-                Vector3d ellipsoidAxes = body->getSemiAxes().cast<double>();
+        // There's no mesh, so the object is an ellipsoid.  If it's
+        // spherical, we've already done all the work we need to. Otherwise,
+        // we need to perform a ray-ellipsoid intersection test.
+        if (!body->isSphere()) {
+            Vector3d ellipsoidAxes = body->getSemiAxes().cast<double>();
 
-                // Transform rotate the pick ray into object coordinates
-                Matrix3d m = body->getEclipticToEquatorial(pickInfo->jd).toRotationMatrix();
-                Ray3d r(pickInfo->pickRay.origin - bpos, pickInfo->pickRay.direction);
-                r = r.transform(m);
-                if (!testIntersection(r, Ellipsoidd(ellipsoidAxes), distance))
-                    distance = -1.0;
-            }
-        } else {
             // Transform rotate the pick ray into object coordinates
-            Quaterniond qd = body->getGeometryOrientation().cast<double>();
-            Matrix3d m = (qd * body->getEclipticToBodyFixed(pickInfo->jd)).toRotationMatrix();
+            Matrix3d m = body->getEclipticToEquatorial(pickInfo->jd).toRotationMatrix();
             Ray3d r(pickInfo->pickRay.origin - bpos, pickInfo->pickRay.direction);
             r = r.transform(m);
-
-            auto geometry = GetGeometryManager()->find(body->getGeometry());
-            float scaleFactor = body->getGeometryScale();
-            if (geometry != NULL && geometry->isNormalized())
-                scaleFactor = radius;
-
-            // The mesh vertices are normalized, then multiplied by a scale
-            // factor.  Thus, the ray needs to be multiplied by the inverse of
-            // the mesh scale factor.
-            double is = 1.0 / scaleFactor;
-            r.origin *= is;
-            r.direction *= is;
-
-            if (geometry != NULL) {
-                if (!geometry->pick(r, distance))
-                    distance = -1.0;
-            }
+            if (!testIntersection(r, Ellipsoidd(ellipsoidAxes), distance))
+                distance = -1.0;
         }
+
         // Make also sure that the pickRay does not intersect the body in the
         // opposite hemisphere! Hence, need again the "bodyMiss" angle
 

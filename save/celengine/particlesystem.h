@@ -14,7 +14,6 @@
 #include <celutil/color.h>
 #include <celmodel/model.h>
 #include <celmodel/mesh.h>
-#include "geometry.h"
 #include <Eigen/Core>
 #include <string>
 #include <list>

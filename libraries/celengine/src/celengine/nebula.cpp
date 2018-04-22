@@ -17,14 +17,12 @@
 #include <celmath/mathlib.h>
 #include <celastro/astro.h>
 
-#include "celestia.h"
 #include "render.h"
-#include "meshmanager.h"
 
 using namespace Eigen;
 using namespace std;
 
-Nebula::Nebula() : geometry(InvalidResource) {
+Nebula::Nebula(){
 }
 
 const char* Nebula::getType() const {
@@ -38,14 +36,6 @@ size_t Nebula::getDescription(char* buf, size_t bufLength) const {
     return snprintf(buf, bufLength, _("Nebula"));
 }
 
-ResourceHandle Nebula::getGeometry() const {
-    return geometry;
-}
-
-void Nebula::setGeometry(ResourceHandle _geometry) {
-    geometry = _geometry;
-}
-
 const char* Nebula::getObjTypeName() const {
     return "nebula";
 }
@@ -56,12 +46,7 @@ bool Nebula::pick(const Ray3d& ray, double& distanceToPicker, double& cosAngleTo
 }
 
 bool Nebula::load(const HashPtr& params, const string& resPath) {
-    string geometryFileName;
-    if (params->getString("Mesh", geometryFileName)) {
-        ResourceHandle geometryHandle = GetGeometryManager()->getHandle(GeometryInfo(geometryFileName, resPath));
-        setGeometry(geometryHandle);
-    }
-
+    params->getString("Mesh", geometryFileName);
     return DeepSkyObject::load(params, resPath);
 }
 

@@ -34,7 +34,6 @@
 #include "parser.h"
 #include "parseobject.h"
 #include "multitexture.h"
-#include "meshmanager.h"
 #include "galaxy.h"
 #include "globular.h"
 #include "opencluster.h"

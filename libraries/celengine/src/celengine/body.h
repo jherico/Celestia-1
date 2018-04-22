@@ -235,8 +235,8 @@ public:
     const AtmospherePtr& getAtmosphere() const { return atmosphere; }
     void setAtmosphere(const Atmosphere&);
 
-    const ResourceHandle& getGeometry() const { return geometry; }
-    void setGeometry(ResourceHandle _geometry) { geometry = _geometry; }
+    const std::string& getGeometry() const { return geometry; }
+    void setGeometry(const std::string& _geometry) { geometry = _geometry; }
     const Eigen::Quaternionf& getGeometryOrientation() const { return geometryOrientation; }
     void setGeometryOrientation(const Eigen::Quaternionf& orientation) { geometryOrientation = orientation; }
     float getGeometryScale() const { return geometryScale; }
@@ -362,7 +362,7 @@ private:
 
     float cullingRadius{ 0.0f };
 
-    ResourceHandle geometry{ InvalidResource };
+    std::string geometry;
     float geometryScale{ 1.0f };
     Surface surface{ Color(1.0f, 1.0f, 1.0f) };
 

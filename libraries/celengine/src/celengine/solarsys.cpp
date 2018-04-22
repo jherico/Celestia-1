@@ -23,7 +23,6 @@
 #include <memory>
 #include "parser.h"
 #include "texmanager.h"
-#include "meshmanager.h"
 #include "universe.h"
 #include "multitexture.h"
 #include "parseobject.h"
@@ -747,9 +746,7 @@ static BodyPtr CreateBody(const string& name,
             float geometryScale = 1.0f;
             planetData->getLength("MeshScale", geometryScale);
 
-            ResourceHandle geometryHandle =
-                GetGeometryManager()->getHandle(GeometryInfo(geometry, path, geometryCenter, 1.0f, isNormalized));
-            body->setGeometry(geometryHandle);
+            body->setGeometry(geometry);
             body->setGeometryScale(geometryScale);
         }
     }

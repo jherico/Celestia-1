@@ -901,7 +901,7 @@ float Star::getRadius() const {
 
     // Use the Stefan-Boltzmann law to estimate the radius of a
     // star from surface temperature and luminosity
-    return SOLAR_RADIUS * (float)sqrt(boloLum) * square(SOLAR_TEMPERATURE / getTemperature());
+    return (float)(SOLAR_RADIUS * (float)sqrt(boloLum) * square(SOLAR_TEMPERATURE / getTemperature()));
 #endif
 }
 

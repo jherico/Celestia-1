@@ -23,8 +23,8 @@ public:
 
     const TimelinePhasePtr& findPhase(double t) const;
     bool appendPhase(const TimelinePhasePtr&);
-    const TimelinePhasePtr& getPhase(uint32_t n) const;
-    uint32_t phaseCount() const;
+    const TimelinePhasePtr& getPhase(size_t n) const;
+    size_t phaseCount() const;
 
     double startTime() const;
     double endTime() const;

@@ -11,7 +11,6 @@
 #define CELENGINE_NEBULA_H_
 
 #include "deepskyobj.h"
-#include <celutil/reshandle.h>
 
 class Nebula : public DeepSkyObject {
 public:
@@ -25,18 +24,8 @@ public:
 
     bool pick(const Ray3d& ray, double& distanceToPicker, double& cosAngleToBoundCenter) const override;
     bool load(const HashPtr&, const std::string&) override;
-    //void render(const GLContext& context,
-    //                    const Eigen::Vector3f& offset,
-    //                    const Eigen::Quaternionf& viewerOrientation,
-    //                    float brightness,
-    //                    float pixelSize) override ;
-
     uint32_t getRenderMask() const override;
     uint32_t getLabelMask() const override;
-
-    void setGeometry(ResourceHandle);
-    ResourceHandle getGeometry() const;
-
     const char* getObjTypeName() const override;
 
 public:
@@ -53,7 +42,7 @@ public:
     };
 
 private:
-    ResourceHandle geometry{ InvalidResource };
+    std::string geometryFileName;
 };
 
 #endif  // CELENGINE_NEBULA_H_

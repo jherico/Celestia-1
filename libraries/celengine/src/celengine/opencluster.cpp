@@ -8,14 +8,15 @@
 // of the License, or (at your option) any later version.
 
 #include "opencluster.h"
+
+#include <algorithm>
+
+#include <cstdio>
+
 #include <celastro/astro.h>
 #include <celmath/mathlib.h>
 #include <celutil/util.h>
 #include <celutil/debug.h>
-#include <algorithm>
-#include <cstdio>
-#include "celestia.h"
-#include "meshmanager.h"
 #include "render.h"
 
 using namespace Eigen;

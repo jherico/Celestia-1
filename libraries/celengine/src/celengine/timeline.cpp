@@ -67,13 +67,13 @@ const TimelinePhasePtr& Timeline::findPhase(double t) const {
 
 /*! Get the phase at the specified index.
  */
-const TimelinePhasePtr& Timeline::getPhase(uint32_t n) const {
+const TimelinePhasePtr& Timeline::getPhase(size_t n) const {
     return phases.at(n);
 }
 
 /*! Get the number of phases in this timeline.
  */
-uint32_t Timeline::phaseCount() const {
+size_t Timeline::phaseCount() const {
     return phases.size();
 }
 

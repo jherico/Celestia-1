@@ -17,8 +17,6 @@
 #include <celutil/utf8.h>
 #include <celmath/mathlib.h>
 
-#include "geometry.h"
-#include "meshmanager.h"
 #include "atmosphere.h"
 #include "frame.h"
 #include "timeline.h"
@@ -535,6 +533,9 @@ void Body::computeLocations() {
         return;
 
     locationsComputed = true;
+    return;
+
+#if 0
 
     // No work to do if there's no mesh, or if the mesh cannot be loaded
     if (geometry == InvalidResource)
@@ -561,7 +562,9 @@ void Body::computeLocations() {
             location->setPosition(v);
         }
     }
+#endif
 }
+
 
 /*! Add a new reference mark.
  */

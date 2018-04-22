@@ -28,7 +28,6 @@
 #include "parser.h"
 #include "parseobject.h"
 #include "multitexture.h"
-#include "meshmanager.h"
 
 using namespace Eigen;
 using namespace std;
@@ -709,9 +708,7 @@ bool StarDatabase::createStar(const StarPtr& star,
         }
 
         if (hasModel) {
-            ResourceHandle geometryHandle =
-                GetGeometryManager()->getHandle(GeometryInfo(modelName, path, Vector3f::Zero(), 1.0f, true));
-            details->setGeometry(geometryHandle);
+            details->setGeometry(modelName);
         }
 
         if (hasSemiAxes) {

@@ -45,7 +45,7 @@ private:
 public:
     inline float getRadius() const { return radius; }
     inline float getTemperature() const { return temperature; }
-    inline ResourceHandle getGeometry() const { return geometry; }
+    inline const std::string& getGeometry() const { return geometry; }
     inline const MultiResTexture& getTexture() const { return texture; }
     inline const OrbitPtr& getOrbit() const { return orbit; }
     inline float getOrbitalRadius() const { return orbitalRadius; }
@@ -62,7 +62,7 @@ public:
     void setSpectralType(const std::string&);
     void setBolometricCorrection(float correction) { bolometricCorrection = correction; }
     void setTexture(const MultiResTexture& tex) { texture = tex; }
-    void setGeometry(ResourceHandle rh) { geometry = rh; }
+    void setGeometry(const std::string& rh) { geometry = rh; }
     void setOrbit(const OrbitPtr&);
     void setOrbitBarycenter(const StarPtr&);
     void setOrbitalRadius(float);
@@ -98,7 +98,7 @@ private:
     char spectralType[8];
 
     MultiResTexture texture;
-    ResourceHandle geometry;
+    std::string geometry;
 
     OrbitPtr orbit;
     float orbitalRadius;
@@ -184,7 +184,7 @@ public:
     inline const char* getSpectralType() const { return details->getSpectralType(); }
     inline float getBolometricMagnitude() const { return absMag + details->getBolometricCorrection(); }
     MultiResTexture getTexture() const { return details->getTexture(); }
-    ResourceHandle getGeometry() const { return details->getGeometry(); }
+    const std::string& getGeometry() const { return details->getGeometry(); }
     inline const OrbitPtr& getOrbit() const { return details->getOrbit(); }
     inline float getOrbitalRadius() const { return details->getOrbitalRadius(); }
     inline const StarPtr& getOrbitBarycenter() const { return details->getOrbitBarycenter(); }

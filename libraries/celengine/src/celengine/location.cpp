@@ -18,12 +18,12 @@
 using namespace Eigen;
 using namespace std;
 
-static map<string, uint32_t> FeatureNameToFlag;
+static map<string, Location::FeatureType> FeatureNameToFlag;
 static bool featureTableInitialized = false;
 
 struct FeatureNameEntry {
     const char* name;
-    uint32_t flag;
+    Location::FeatureType flag;
 };
 
 FeatureNameEntry FeatureNames[] = {
