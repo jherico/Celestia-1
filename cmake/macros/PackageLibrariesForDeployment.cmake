@@ -12,12 +12,10 @@
 macro(PACKAGE_LIBRARIES_FOR_DEPLOYMENT)
   if (WIN32)
     configure_file(
-      ${HF_CMAKE_DIR}/templates/FixupBundlePostBuild.cmake.in
+      ${CMAKE_SOURCE_DIR}/cmake/templates/FixupBundlePostBuild.cmake.in
       ${CMAKE_CURRENT_BINARY_DIR}/FixupBundlePostBuild.cmake
       @ONLY
     )
-
-    set(PLUGIN_PATH "plugins")
 
     # add a post-build command to copy DLLs beside the executable
     add_custom_command(
@@ -29,6 +27,7 @@ macro(PACKAGE_LIBRARIES_FOR_DEPLOYMENT)
         -P "${CMAKE_CURRENT_BINARY_DIR}/FixupBundlePostBuild.cmake"
     )
 
+    get_filename_component(QT_DIR ${Qt5_DIR}/../../.. ABSOLUTE)
     find_program(WINDEPLOYQT_COMMAND windeployqt PATHS ${QT_DIR}/bin NO_DEFAULT_PATH)
 
     if (NOT WINDEPLOYQT_COMMAND)
@@ -43,26 +42,5 @@ macro(PACKAGE_LIBRARIES_FOR_DEPLOYMENT)
        ${EXTRA_DEPLOY_OPTIONS} $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>,$<CONFIG:RelWithDebInfo>>:--release>\
        --no-compiler-runtime --no-opengl-sw --no-angle -no-system-d3d-compiler \"$<TARGET_FILE:${TARGET_NAME}>\""
     )
-
-    set(QTAUDIO_PATH "$<TARGET_FILE_DIR:${TARGET_NAME}>/audio")
-    set(QTAUDIO_WIN7_PATH "$<TARGET_FILE_DIR:${TARGET_NAME}>/audioWin7/audio")
-    set(QTAUDIO_WIN8_PATH "$<TARGET_FILE_DIR:${TARGET_NAME}>/audioWin8/audio")
-
-    # copy qtaudio_wasapi.dll and qtaudio_windows.dll in the correct directories for runtime selection
-    add_custom_command(
-      TARGET ${TARGET_NAME}
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E make_directory "${QTAUDIO_WIN7_PATH}"
-      COMMAND ${CMAKE_COMMAND} -E make_directory "${QTAUDIO_WIN8_PATH}"
-      # copy release DLLs
-      COMMAND if exist "${QTAUDIO_PATH}/qtaudio_windows.dll" ( ${CMAKE_COMMAND} -E copy "${QTAUDIO_PATH}/qtaudio_windows.dll" "${QTAUDIO_WIN7_PATH}" )
-      COMMAND if exist "${QTAUDIO_PATH}/qtaudio_windows.dll" ( ${CMAKE_COMMAND} -E copy "${WASAPI_DLL_PATH}/qtaudio_wasapi.dll" "${QTAUDIO_WIN8_PATH}" )
-      # copy debug DLLs
-      COMMAND if exist "${QTAUDIO_PATH}/qtaudio_windowsd.dll" ( ${CMAKE_COMMAND} -E copy "${QTAUDIO_PATH}/qtaudio_windowsd.dll" "${QTAUDIO_WIN7_PATH}" )
-      COMMAND if exist "${QTAUDIO_PATH}/qtaudio_windowsd.dll" ( ${CMAKE_COMMAND} -E copy "${WASAPI_DLL_PATH}/qtaudio_wasapid.dll" "${QTAUDIO_WIN8_PATH}" )
-      # remove directory
-      COMMAND  ${CMAKE_COMMAND} -E remove_directory "${QTAUDIO_PATH}"
-    )
-
   endif ()
 endmacro()

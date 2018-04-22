@@ -1,0 +1,36 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/icons">
+<file alias="celestia.png">images/celestia.png</file>
+<file alias="time-currenttime.png">images/time-currenttime.png</file>
+<file alias="time-double.png">images/time-double.png</file>
+<file alias="time-faster.png">images/time-faster.png</file>
+<file alias="time-half.png">images/time-half.png</file>
+<file alias="time-pause.png">images/time-pause.png</file>
+<file alias="time-realtime.png">images/time-realtime.png</file>
+<file alias="time-reverse.png">images/time-reverse.png</file>
+<file alias="time-slower.png">images/time-slower.png</file>
+<file alias="about.png">images/about.png</file>
+<file alias="application-bookmark.png">images/application-bookmark.png</file>
+<file alias="book.png">images/book.png</file>
+<file alias="bookmark-add.png">images/bookmark-add.png</file>
+<file alias="capture-video.png">images/capture-video.png</file>
+<file alias="exit.png">images/exit.png</file>
+<file alias="grab-image.png">images/grab-image.png</file>
+<file alias="preferences.png">images/preferences.png</file>
+<file alias="report_GL.png">images/report_GL.png</file>
+<file alias="script2.png">images/script2.png</file>
+<file alias="select_sol.png">images/select_sol.png</file>
+<file alias="set-time.png">images/set-time.png</file>
+<file alias="full_screen.png">images/full_screen.png</file>
+<file alias="split-delete.png">images/split-delete.png</file>
+<file alias="split-horiz.png">images/split-horiz.png</file>
+<file alias="split-single.png">images/split-single.png</file>
+<file alias="split-vert.png">images/split-vert.png</file>
+<file alias="center-obj.png">images/center-obj.png</file>
+<file alias="go-jump.png">images/go-jump.png</file>
+<file alias="clip_copy.png">images/clip_copy.png</file>
+<file alias="clip_paste.png">images/clip_paste.png</file>
+<file alias="picture_copy.png">images/picture_copy.png</file>
+<file alias="split-cycle.png">images/split-cycle.png</file>
+</qresource>
+</RCC>
