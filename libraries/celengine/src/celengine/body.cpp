@@ -824,12 +824,11 @@ bool PlanetarySystem::traverse(const TraversalFunc& func, void* info) const {
 
 std::vector<std::string> PlanetarySystem::getCompletion(const std::string& _name, bool deepSearch) const {
     std::vector<std::string> completion;
-    int _name_length = UTF8Length(_name);
+    auto _name_length = UTF8Length(_name);
 
     // Search through all names in this planetary system.
-    for (auto iter = objectIndex.begin(); iter != objectIndex.end(); iter++) {
-        const string& alias = iter->first;
-
+    for (const auto& entry : objectIndex) {
+        const string& alias = entry.first;
         if (UTF8StringCompare(alias, _name, _name_length) == 0) {
             completion.push_back(alias);
         }
@@ -851,7 +850,7 @@ std::vector<std::string> PlanetarySystem::getCompletion(const std::string& _name
 /*! Get the order of the object in the list of children. Returns -1 if the
  *  specified body is not a child object.
  */
-int PlanetarySystem::getOrder(const BodyPtr& body) const {
+size_t PlanetarySystem::getOrder(const BodyPtr& body) const {
     auto iter = std::find(satellites.begin(), satellites.end(), body);
     if (iter == satellites.end())
         return -1;

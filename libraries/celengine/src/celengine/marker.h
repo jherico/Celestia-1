@@ -63,6 +63,8 @@ private:
     std::string m_label;
 };
 
+using MarkerRepresentationPtr = std::shared_ptr<MarkerRepresentation>;
+
 /*! Options for marker sizing:
  *    When the sizing is set to ConstantSize, the marker size is interpreted
  *    as a fixed size in pixels.

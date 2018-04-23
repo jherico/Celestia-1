@@ -11,20 +11,23 @@
 #ifndef _CELENGINE_RENDER_H_
 #define _CELENGINE_RENDER_H_
 
-#include <Eigen/Core>
-#include <celmath/frustum.h>
-#include "universe.h"
-#include "observer.h"
-#include "selection.h"
-#include "starcolors.h"
 #include <vector>
 #include <list>
 #include <string>
 
+#include <Eigen/Core>
+
+#include <celmath/frustum.h>
+
+#include "universe.h"
+#include "observer.h"
+#include "selection.h"
+#include "starcolors.h"
+#include "lightenv.h"
+
 class RendererWatcher;
 class FrameTree;
 class ReferenceMark;
-class CurvePlot;
 
 struct LightSource {
     Eigen::Vector3d position;
@@ -44,11 +47,9 @@ struct RenderListEntry {
         RenderableReferenceMark,
     };
 
-    union {
-        const Star* star;
-        Body* body;
-        const ReferenceMark* refMark;
-    };
+    StarConstPtr star;
+    BodyConstPtr body;
+    ReferenceMarkConstPtr refMark;
 
     Eigen::Vector3f position;
     Eigen::Vector3f sun;
@@ -64,27 +65,42 @@ struct RenderListEntry {
 };
 
 struct SecondaryIlluminator {
-    const Body* body;
+    BodyConstPtr body;
     Eigen::Vector3d position_v;  // viewer relative position
     float radius;                // radius in km
     float reflectedIrradiance;   // albedo times total irradiance from direct sources
 };
 
-class StarVertexBuffer;
-class PointStarVertexBuffer;
-
 class Renderer {
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    Renderer();
+    ~Renderer();
+
     struct DetailOptions {
-        DetailOptions();
-        uint32_t ringSystemSections;
-        uint32_t orbitPathSamplePoints;
-        uint32_t shadowTextureSize;
-        uint32_t eclipseTextureSize;
-        double orbitWindowEnd;
-        double orbitPeriodsShown;
-        double linearFadeFraction;
+        unsigned int ringSystemSections{ 100 };
+        unsigned int orbitPathSamplePoints{ 100 };
+        unsigned int shadowTextureSize{ 256 };
+        unsigned int eclipseTextureSize{ 128 };
+        double orbitWindowEnd{ 0.5 };
+        double orbitPeriodsShown{ 1.0 };
+        double linearFadeFraction{ 0.0 };
     };
+
+    bool init(int, int, DetailOptions&);
+    void shutdown(){};
+
+    float calcPixelSize(float fov, float windowHeight);
+    void setFaintestAM45deg(float);
+    float getFaintestAM45deg() const;
+
+    void setRenderMode(int);
+    void autoMag(float& faintestMag);
+#if 0
+    void render(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
+    void draw(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
+#endif
 
     enum
     {
@@ -155,6 +171,286 @@ public:
                                           Renderer::ShowNebulae | Renderer::ShowOpenClusters | Renderer::ShowAutoMag |
                                           Renderer::ShowSmoothLines;
 
+    int getRenderFlags() const;
+    void setRenderFlags(int);
+    int getLabelMode() const;
+    void setLabelMode(int);
+    float getAmbientLightLevel() const;
+    void setAmbientLightLevel(float);
+    float getMinimumOrbitSize() const;
+    void setMinimumOrbitSize(float);
+    float getMinimumFeatureSize() const;
+    void setMinimumFeatureSize(float);
+    float getDistanceLimit() const;
+    void setDistanceLimit(float);
+    int getOrbitMask() const;
+    void setOrbitMask(int);
+    const ColorTemperatureTable* getStarColorTable() const;
+    void setStarColorTable(const ColorTemperatureTable*);
+    void setStarStyle(StarStyle style);
+    StarStyle getStarStyle() const { return starStyle; }
+
+    // Label related methods
+    enum LabelAlignment
+    {
+        AlignCenter,
+        AlignLeft,
+        AlignRight
+    };
+
+    enum LabelVerticalAlignment
+    {
+        VerticalAlignCenter,
+        VerticalAlignBottom,
+        VerticalAlignTop,
+    };
+
+    static const int MaxLabelLength = 48;
+    struct Annotation {
+        char labelText[MaxLabelLength];
+        const MarkerRepresentation* markerRep;
+        Color color;
+        Eigen::Vector3f position;
+        LabelAlignment halign : 3;
+        LabelVerticalAlignment valign : 3;
+        float size;
+
+        bool operator<(const Annotation&) const;
+    };
+
+    void addForegroundAnnotation(const MarkerRepresentationPtr& markerRep,
+                                 const std::string& labelText,
+                                 Color color,
+                                 const Eigen::Vector3f& position,
+                                 LabelAlignment halign = AlignLeft,
+                                 LabelVerticalAlignment valign = VerticalAlignBottom,
+                                 float size = 0.0f);
+    void addBackgroundAnnotation(const MarkerRepresentationPtr& markerRep,
+                                 const std::string& labelText,
+                                 Color color,
+                                 const Eigen::Vector3f& position,
+                                 LabelAlignment halign = AlignLeft,
+                                 LabelVerticalAlignment valign = VerticalAlignBottom,
+                                 float size = 0.0f);
+    void addSortedAnnotation(const MarkerRepresentationPtr& markerRep,
+                             const std::string& labelText,
+                             Color color,
+                             const Eigen::Vector3f& position,
+                             LabelAlignment halign = AlignLeft,
+                             LabelVerticalAlignment valign = VerticalAlignBottom,
+                             float size = 0.0f);
+
+    // Callbacks for renderables; these belong in a special renderer interface
+    // only visible in object's render methods.
+    void addObjectAnnotation(const MarkerRepresentationPtr& markerRep,
+                             const std::string& labelText,
+                             Color,
+                             const Eigen::Vector3f&);
+    Eigen::Quaternionf getCameraOrientation() const;
+    float getNearPlaneDistance() const;
+
+    void clearAnnotations(std::vector<Annotation>&);
+    void clearSortedAnnotations();
+
+    struct OrbitPathListEntry {
+        float centerZ;
+        float radius;
+        BodyPtr body;
+        StarConstPtr star;
+        Eigen::Vector3d origin;
+        float opacity;
+
+        bool operator<(const OrbitPathListEntry&) const;
+    };
+
+    enum FontStyle
+    {
+        FontNormal = 0,
+        FontLarge = 1,
+        FontCount = 2,
+    };
+
+    bool settingsHaveChanged() const { return settingsChanged; }
+    void markSettingsChanged() {
+        settingsChanged = true;
+        notifyWatchers();
+    }
+
+    void addWatcher(RendererWatcher* watcher) { watchers.insert(watchers.end(), watcher); }
+    void removeWatcher(RendererWatcher* watcher) { std::remove(watchers.begin(), watchers.end(), watcher); }
+    void notifyWatchers() const;
+
+public:
+    // Internal types
+    // TODO: Figure out how to make these private.  Even with a friend
+    //
+    struct Particle {
+        Eigen::Vector3f center;
+        float size;
+        Color color;
+        float pad0, pad1, pad2;
+    };
+
+    struct RenderProperties {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        RenderProperties() :
+            surface(NULL), atmosphere(NULL), rings(NULL), radius(1.0f), geometryScale(1.0f), semiAxes(1.0f, 1.0f, 1.0f),
+            geometry(InvalidResource), orientation(Eigen::Quaternionf::Identity()){};
+
+        SurfacePtr surface;
+        const AtmospherePtr atmosphere;
+        RingSystemPtr rings;
+        float radius;
+        float geometryScale;
+        Eigen::Vector3f semiAxes;
+        ResourceHandle geometry;
+        Eigen::Quaternionf orientation;
+        LightingState::EclipseShadowVector* eclipseShadows;
+    };
+
+private:
+    struct SkyVertex {
+        float x, y, z;
+        unsigned char color[4];
+    };
+
+    struct SkyContourPoint {
+        Eigen::Vector3f v;
+        Eigen::Vector3f eyeDir;
+        float centerDist;
+        float eyeDist;
+        float cosSkyCapAltitude;
+    };
+
+    template <class OBJ>
+    struct ObjectLabel {
+        OBJ* obj;
+        std::string label;
+
+        ObjectLabel() : obj(NULL), label(""){};
+
+        ObjectLabel(OBJ* _obj, const std::string& _label) : obj(_obj), label(_label){};
+
+        ObjectLabel(const ObjectLabel& objLbl) : obj(objLbl.obj), label(objLbl.label){};
+
+        ObjectLabel& operator=(const ObjectLabel& objLbl) {
+            obj = objLbl.obj;
+            label = objLbl.label;
+            return *this;
+        };
+    };
+
+    typedef ObjectLabel<Star> StarLabel;
+    typedef ObjectLabel<DeepSkyObject> DSOLabel;  // currently not used
+
+    struct DepthBufferPartition {
+        int index;
+        float nearZ;
+        float farZ;
+    };
+
+private:
+    void buildRenderLists(const Eigen::Vector3d& astrocentricObserverPos,
+                          const Frustum& viewFrustum,
+                          const Eigen::Vector3d& viewPlaneNormal,
+                          const Eigen::Vector3d& frameCenter,
+                          const FrameTreePtr& tree,
+                          const Observer& observer,
+                          double now);
+    void buildOrbitLists(const Eigen::Vector3d& astrocentricObserverPos,
+                         const Eigen::Quaterniond& observerOrientation,
+                         const Frustum& viewFrustum,
+                         const FrameTreePtr& tree,
+                         double now);
+    void buildLabelLists(const Frustum& viewFrustum, double now);
+
+    void addRenderListEntries(RenderListEntry& rle, const BodyPtr& body, bool isLabeled);
+
+    void addStarOrbitToRenderList(const StarPtr& star, const Observer& observer, double now);
+
+    void addAnnotation(std::vector<Annotation>&,
+                       const MarkerRepresentationPtr&,
+                       const std::string& labelText,
+                       Color color,
+                       const Eigen::Vector3f& position,
+                       LabelAlignment halign = AlignLeft,
+                       LabelVerticalAlignment = VerticalAlignBottom,
+                       float size = 0.0f);
+
+private:
+    int windowWidth;
+    int windowHeight;
+    float fov;
+    double cosViewConeAngle;
+    int screenDpi;
+    float corrFac;
+    float pixelSize;
+    float faintestAutoMag45deg;
+
+    int renderMode;
+    int labelMode;
+    int renderFlags;
+    int orbitMask;
+    float ambientLightLevel;
+    bool fragmentShaderEnabled;
+    bool vertexShaderEnabled;
+    float brightnessBias;
+
+    float brightnessScale;
+    float faintestMag;
+    float faintestPlanetMag;
+    float saturationMagNight;
+    float saturationMag;
+    StarStyle starStyle;
+
+    Color ambientColor;
+    std::string displayedSurface;
+
+    Eigen::Quaternionf m_cameraOrientation;
+    std::vector<RenderListEntry> renderList;
+    std::vector<SecondaryIlluminator> secondaryIlluminators;
+    std::vector<DepthBufferPartition> depthPartitions;
+    std::vector<Particle> glareParticles;
+    std::vector<Annotation> backgroundAnnotations;
+    std::vector<Annotation> foregroundAnnotations;
+    std::vector<Annotation> depthSortedAnnotations;
+    std::vector<Annotation> objectAnnotations;
+    std::vector<OrbitPathListEntry> orbitPathList;
+    LightingState::EclipseShadowVector eclipseShadows[MaxLights];
+    std::vector<StarConstPtr> nearStars;
+    std::vector<LightSource> lightSourceList;
+    DetailOptions detailOptions;
+    int currentIntervalIndex;
+
+private:
+    uint32_t lastOrbitCacheFlush;
+
+    float minOrbitSize;
+    float distanceLimit;
+    float minFeatureSize;
+    uint32_t locationFilter;
+    SkyContourPoint* skyContour;
+    const ColorTemperatureTable* colorTemp;
+    Selection highlightObject;
+    bool settingsChanged;
+    double realTime;
+
+    // Location markers
+public:
+    MarkerRepresentation mountainRep;
+    MarkerRepresentation craterRep;
+    MarkerRepresentation observatoryRep;
+    MarkerRepresentation cityRep;
+    MarkerRepresentation genericLocationRep;
+    MarkerRepresentation galaxyRep;
+    MarkerRepresentation nebulaRep;
+    MarkerRepresentation openClusterRep;
+    MarkerRepresentation globularRep;
+
+    std::list<RendererWatcher*> watchers;
+
+public:
     // Colors for all lines and labels
     static Color StarLabelColor;
     static Color PlanetLabelColor;

@@ -45,7 +45,7 @@ public:
     void removeBody(const BodyPtr& body);
     void replaceBody(const BodyPtr& oldBody, const BodyPtr& newBody);
 
-    int getOrder(const BodyPtr& body) const;
+    size_t getOrder(const BodyPtr& body) const;
 
     enum TraversalResult
     {

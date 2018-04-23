@@ -65,5 +65,4 @@ struct RenderInfo
     {};
 };
 
-extern LODSphereMesh* g_lodSphere;
 
