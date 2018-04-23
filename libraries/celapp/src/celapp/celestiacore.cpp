@@ -335,7 +335,7 @@ void CelestiaCore::tick() {
 
     // The time step is normally driven by the system clock; however, when
     // recording a movie, we fix the time step the frame rate of the movie.
-    double dt = 0.0;
+    double dt = sysTime - lastTime;
     currentTime += dt;
 
     Selection refObject = sim->getFrame()->getRefObject();

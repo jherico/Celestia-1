@@ -4,7 +4,7 @@
 class TimerImpl : public Timer {
 public:
     using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
-    using ms = std::chrono::microseconds;
+    using ms = std::chrono::milliseconds;
 
     TimerImpl() {
         reset();
