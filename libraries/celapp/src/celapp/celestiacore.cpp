@@ -71,16 +71,6 @@ static void warning(string s) {
     cout << s;
 }
 
-struct OverlayImage {
-    Texture* texture;
-    int xSize;
-    int ySize;
-    int left;
-    int bottom;
-};
-
-vector<OverlayImage> overlayImages;
-
 // If right dragging to rotate, adjust the rotation rate based on the
 // distance from the reference object.  This makes right drag rotation
 // useful even when the camera is very near the surface of an object.
@@ -205,12 +195,6 @@ bool View::walkTreeResizeDelta(const ViewPtr& v, float delta, bool check) {
     return true;
 }
 
-CelestiaCore::CelestiaCore() {
-}
-
-CelestiaCore::~CelestiaCore() {
-}
-
 void CelestiaCore::readFavoritesFile() {
     // Set up favorites list
     if (config->favoritesFile != "") {
@@ -241,11 +225,7 @@ void CelestiaCore::activateFavorite(FavoritesEntry& fav) {
     sim->setFrame(fav.coordSys, sim->getSelection());
 }
 
-void CelestiaCore::addFavorite(string name, string parentFolder) {
-    addFavorite(name, parentFolder, favorites.end());
-}
-
-void CelestiaCore::addFavorite(string name, string parentFolder, const FavoritesList::const_iterator& pos) {
+void CelestiaCore::addFavorite(const string& name, const string& parentFolder, const FavoritesList::const_iterator& pos) {
     FavoritesEntry fav;
     fav.jd = sim->getTime();
     fav.position = sim->getObserver().getPosition();
@@ -265,11 +245,7 @@ void CelestiaCore::addFavorite(string name, string parentFolder, const Favorites
     favorites.insert(pos, fav);
 }
 
-void CelestiaCore::addFavoriteFolder(string name) {
-    addFavoriteFolder(name, favorites.end());
-}
-
-void CelestiaCore::addFavoriteFolder(string name, const FavoritesList::const_iterator& pos) {
+void CelestiaCore::addFavoriteFolder(const string& name, const FavoritesList::const_iterator& pos) {
     FavoritesEntry fav;
     fav.name = name;
     fav.isFolder = true;
@@ -291,31 +267,11 @@ void CelestiaCore::setLightTravelDelay(double distanceKm) {
     sim->setTime(sim->getTime() - lt);
 }
 
-bool CelestiaCore::getAltAzimuthMode() const {
-    return altAzimuthMode;
-}
-
-void CelestiaCore::setAltAzimuthMode(bool enable) {
-    altAzimuthMode = enable;
-}
-
 void CelestiaCore::start(double t) {
-#if 0
-    if (config->initScriptFile != "") {
-        // using the KdeAlerter in runScript would create an infinite loop,
-        // break it here by resetting config->initScriptFile:
-        string filename = config->initScriptFile;
-        config->initScriptFile = "";
-        runScript(filename);
-    }
-#endif
-
     // Set the simulation starting time to the current system time
     sim->setTime(t);
     sim->update(0.0);
-
     sysTime = timer->getTime();
-
     if (startURL != "")
         goToUrl(startURL);
 }
@@ -344,52 +300,6 @@ void CelestiaCore::tick() {
     }
 
     sim->update(dt);
-}
-
-// Return true if anything changed that requires re-rendering. Otherwise, we
-// can skip rendering, keep the GPU idle, and save power.
-bool CelestiaCore::viewUpdateRequired() const {
-#if 1
-    // Enable after 1.5.0
-    return true;
-#else
-    bool isPaused = sim->getPauseState() || sim->getTimeScale() == 0.0;
-
-    // See if the camera in any of the views is moving
-    bool observersMoving = false;
-    for (vector<View*>::const_iterator iter = views.begin(); iter != views.end(); iter++) {
-        View* v = *iter;
-        if (v->observer->getAngularVelocity().length() > 1.0e-10 || v->observer->getVelocity().length() > 1.0e-12) {
-            observersMoving = true;
-            break;
-        }
-    }
-
-    if (viewChanged || !isPaused || observersMoving || dollyMotion != 0.0 || zoomMotion != 0.0 ||
-        scriptState == ScriptRunning || renderer->settingsHaveChanged()) {
-        return true;
-    } else {
-        return false;
-    }
-#endif
-}
-
-void CelestiaCore::setViewChanged() {
-    viewChanged = true;
-}
-
-bool CelestiaCore::getActiveFrameVisible() const {
-    return showActiveViewFrame;
-}
-
-void CelestiaCore::setActiveFrameVisible(bool visible) {
-    setViewChanged();
-
-    showActiveViewFrame = visible;
-}
-
-void CelestiaCore::setContextMenuCallback(ContextMenuFunc callback) {
-    contextMenuCallback = callback;
 }
 
 class SolarSystemLoader : public EnumFilesHandler {
@@ -456,8 +366,6 @@ typedef CatalogLoader<DSODatabase> DeepSkyLoader;
 bool CelestiaCore::initSimulation(const string& configFileName,
                                   const vector<string>& extrasDirs,
                                   const ProgressNotifierPtr& progressNotifier) {
-    // Say we're not ready to render yet.
-    // bReady = false;
     if (!configFileName.empty()) {
         config = ReadCelestiaConfig(configFileName);
     } else {
@@ -701,11 +609,6 @@ bool CelestiaCore::readStars(const CelestiaConfig& cfg, const ProgressNotifierPt
     return true;
 }
 
-/// Set the faintest visible star magnitude; adjust the renderer's
-/// brightness parameters appropriately.
-void CelestiaCore::setFaintest(float magnitude) {
-    sim->setFaintestVisible(magnitude);
-}
 
 /// Set faintest visible star magnitude and saturation magnitude
 /// for a given field of view;
@@ -723,69 +626,14 @@ void CelestiaCore::fatalError(const string& msg) {
         alerter->fatalError(msg);
 }
 
-/// Sets the cursor handler object.
-/// This must be set before calling initSimulation
-/// or the default cursor will not be used.
-int CelestiaCore::getTimeZoneBias() const {
-    return timeZoneBias;
-}
-
-bool CelestiaCore::getLightDelayActive() const {
-    return lightTravelFlag;
-}
-
-void CelestiaCore::setLightDelayActive(bool lightDelayActive) {
-    lightTravelFlag = lightDelayActive;
-}
-
-void CelestiaCore::setTextEnterMode(int mode) {
-    if (mode != textEnterMode) {
-        if ((mode & KbAutoComplete) != (textEnterMode & KbAutoComplete)) {
-            typedText = "";
-            typedTextCompletion.clear();
-            typedTextCompletionIdx = -1;
-        }
-        textEnterMode = mode;
-        notifyWatchers(TextEnterModeChanged);
-    }
-}
-
-int CelestiaCore::getTextEnterMode() const {
-    return textEnterMode;
-}
-
 void CelestiaCore::setTimeZoneBias(int bias) {
     timeZoneBias = bias;
     notifyWatchers(TimeZoneChanged);
 }
 
-string CelestiaCore::getTimeZoneName() const {
-    return timeZoneName;
-}
-
-void CelestiaCore::setTimeZoneName(const string& zone) {
-    timeZoneName = zone;
-}
-
-int CelestiaCore::getHudDetail() {
-    return hudDetail;
-}
-
 void CelestiaCore::setHudDetail(int newHudDetail) {
     hudDetail = newHudDetail % 3;
     notifyWatchers(VerbosityLevelChanged);
-}
-
-Color CelestiaCore::getTextColor() {
-    return textColor;
-}
-
-void CelestiaCore::setTextColor(Color newTextColor) {
-    textColor = newTextColor;
-}
-
-astro::Date::Format CelestiaCore::getDateFormat() const {
-    return dateFormat;
 }
 
 void CelestiaCore::setDateFormat(astro::Date::Format format) {

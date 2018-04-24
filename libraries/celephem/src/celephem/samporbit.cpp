@@ -81,7 +81,7 @@ private:
     vector<Sample<T>> samples;
     double boundingRadius{ 0 };
     double period{ 1 };
-    mutable int lastSample{ 0 };
+    mutable size_t lastSample{ 0 };
 
     const TrajectoryInterpolation interpolation;
 };
@@ -151,15 +151,14 @@ Vector3d SampledOrbit<T>::computePosition(double jd) const {
     } else {
         Sample<T> samp;
         samp.t = jd;
-        int n = lastSample;
+        size_t n = lastSample;
 
         if (n < 1 || n >= (int)samples.size() || jd < samples[n - 1].t || jd > samples[n].t) {
-            typename vector<Sample<T>>::const_iterator iter = lower_bound(samples.begin(), samples.end(), samp);
+            auto iter = lower_bound(samples.begin(), samples.end(), samp);
             if (iter == samples.end())
                 n = samples.size();
             else
                 n = iter - samples.begin();
-
             lastSample = n;
         }
 

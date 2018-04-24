@@ -53,22 +53,8 @@ File Overview
 * solarsys.cpp
   SolarSystem and SolarSystemCatalog classes.
 
-* mesh.cpp
-* spheremesh.cpp
-* 3dsmesh.cpp
-* vertexlist.cpp
-  These files are all related to internal geometry representation.
-  Mesh is an abstract class from which SphereMesh and Mesh3DS are derived.
-  VertexList is basically an easy to use wrapper for OpenGL 1.1 vertex arrays.
-  Eventually, VertexList will be made a subclass of mesh (SimpleMesh) and
-  Mesh3DS will be replaced by a more general class, CompositeMesh, which is
-  just a container for multiple Meshes.
-
 * surface.h
   An aggregation of surface properties that may be applied to a mesh.
-
-* texture.cpp
-  An OpenGL texture class.
 
 * tokenizer.cpp
 * parser.cpp
@@ -84,20 +70,8 @@ File Overview
   makes it much easier to implement a more sophisticated texture manager
   in the future.
 
-* 3dschunk.h
-* 3dsread.cpp
-* 3dsmodel.cpp
-  3DS mesh reading stuff.  Slurp a file and spits out a Mesh3DS.
-
-* console.cpp
-  GL text console class that supports both printf and C++ << style output.
-
 * perlin.cpp
   Noise functions used for procedural geometry and textures.
-
-* regcombine.cpp
-  A few functions that make it easy to use nVidia's REGISTER_COMBINERS
-  extension.
 
 * color.cpp
   Simple RGBA color class.
@@ -112,25 +86,14 @@ File Overview
 * quaternion.h
   Templatized quaternion class
 
-* vecgl.h
-  A handful of template functions which make it easy to use types from
-  vecmath.h with OpenGL
-
 * aabox.h
   Axis-aligned bounding box class.
-
-* glext.h
-* glext.cpp
-  GL extension declarations
 
 * filetype.cpp
   A function for determining the type of a file based on its extension.
 
 * dispmap.cpp
   Some silly code for applying displacement maps to SphereMeshes.
-
-* texfont.cpp
-  Mark J. Kilgard's texture font package
 
 * buildstardb.cpp
   The program used to munge the HIPPARCOS data set into the star database.

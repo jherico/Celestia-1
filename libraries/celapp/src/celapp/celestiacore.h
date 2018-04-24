@@ -134,7 +134,7 @@ public:
     bool walkTreeResizeDelta(const ViewPtr&, float, bool);
 };
 
-class CelestiaCore : public std::enable_shared_from_this<CelestiaCore> // : public Watchable<CelestiaCore>
+class CelestiaCore : public std::enable_shared_from_this<CelestiaCore>  // : public Watchable<CelestiaCore>
 {
 public:
     enum
@@ -241,13 +241,6 @@ public:
 
     enum
     {
-        KbNormal = 0,
-        KbAutoComplete = 1,
-        KbPassToScript = 2,
-    };
-
-    enum
-    {
         ShowNoElement = 0x001,
         ShowTime = 0x002,
         ShowVelocity = 0x004,
@@ -258,9 +251,6 @@ public:
     typedef void (*ContextMenuFunc)(float, float, Selection);
 
 public:
-    CelestiaCore();
-    ~CelestiaCore();
-
     bool initSimulation(const std::string& = "",
                         const std::vector<std::string>& extrasDirs = {},
                         const ProgressNotifierPtr& progressNotifier = nullptr);
@@ -284,43 +274,39 @@ public:
     void readFavoritesFile();
     void writeFavoritesFile();
     void activateFavorite(FavoritesEntry&);
-    void addFavorite(std::string, std::string);
-    void addFavorite(std::string, std::string, const FavoritesList::const_iterator& after);
-    void addFavoriteFolder(std::string);
-    void addFavoriteFolder(std::string, const FavoritesList::const_iterator& after);
-    FavoritesList& getFavorites() { return favorites; }
-
-    bool viewUpdateRequired() const;
-    void setViewChanged();
-
+    void addFavorite(const std::string& name, const std::string& parentFolder) {
+        addFavorite(name, parentFolder, favorites.end());
+    }
+    void addFavorite(const std::string& name, const std::string& parentFolder, const FavoritesList::const_iterator& after);
+    void addFavoriteFolder(const std::string& name) { addFavoriteFolder(name, favorites.end()); }
+    void addFavoriteFolder(const std::string& name, const FavoritesList::const_iterator& after);
+    const FavoritesList& getFavorites() { return favorites; }
     const DestinationList& getDestinations() { return destinations; }
 
-    int getTimeZoneBias() const;
+    int getTimeZoneBias() const { return timeZoneBias; }
     void setTimeZoneBias(int);
-    std::string getTimeZoneName() const;
-    void setTimeZoneName(const std::string&);
-    void setTextEnterMode(int);
-    int getTextEnterMode() const;
+    const std::string& getTimeZoneName() const { return timeZoneName; }
+    void setTimeZoneName(const std::string& zone) { timeZoneName = zone; }
 
-    int getHudDetail();
+    int getHudDetail() { return hudDetail; }
     void setHudDetail(int);
-    Color getTextColor();
-    void setTextColor(Color);
-    astro::Date::Format getDateFormat() const;
+    astro::Date::Format getDateFormat() const { return dateFormat; }
     void setDateFormat(astro::Date::Format format);
 
-    void setContextMenuCallback(ContextMenuFunc);
+    void setContextMenuCallback(ContextMenuFunc callback) { contextMenuCallback = callback; }
 
     void addWatcher(CelestiaWatcher*);
     void removeWatcher(CelestiaWatcher*);
-    void setFaintest(float);
+    /// Set the faintest visible star magnitude; adjust the renderer's
+    /// brightness parameters appropriately.
+    void setFaintest(float magnitude) { sim->setFaintestVisible(magnitude); }
     void setFaintestAutoMag();
-    bool getActiveFrameVisible() const;
-    void setActiveFrameVisible(bool);
-    bool getLightDelayActive() const;
-    void setLightDelayActive(bool);
-    bool getAltAzimuthMode() const;
-    void setAltAzimuthMode(bool);
+    bool getActiveFrameVisible() const { return showActiveViewFrame; }
+    void setActiveFrameVisible(bool visible) { showActiveViewFrame = visible; }
+    bool getLightDelayActive() const { return lightTravelFlag; }
+    void setLightDelayActive(bool lightDelayActive) { lightTravelFlag = lightDelayActive; }
+    bool getAltAzimuthMode() const { return altAzimuthMode; }
+    void setAltAzimuthMode(bool enable) { altAzimuthMode = enable; }
 
     const CelestiaConfigPtr& getConfig() const { return config; }
 
@@ -379,7 +365,6 @@ private:
     int messageVOffset{ 0 };
     double messageStart{ 0 };
     double messageDuration{ 0 };
-    Color textColor{ 1.0f, 1.0f, 1.0f };
 
     double imageStart{ 0 };
     double imageDuration{ 0 };
@@ -392,7 +377,6 @@ private:
     std::string typedText;
     std::vector<std::string> typedTextCompletion;
     int typedTextCompletionIdx{ -1 };
-    int textEnterMode{ KbNormal };
     int hudDetail{ 2 };
     astro::Date::Format dateFormat{ astro::Date::Locale };
     int dateStrWidth{ 0 };
