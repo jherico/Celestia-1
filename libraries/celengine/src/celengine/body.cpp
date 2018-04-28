@@ -167,7 +167,7 @@ const RotationModelPtr& Body::getRotationModel(double tdb) const {
  *  getCullingRadius() for that.
  */
 float Body::getBoundingRadius() const {
-    if (geometry == InvalidResource)
+    if (geometry.empty())
         return radius;
     else
         return radius * 1.7320508f;  // sqrt(3)
@@ -186,14 +186,14 @@ void Body::setSemiAxes(const Vector3f& _semiAxes) {
 /*! Return true if the body is a perfect sphere.
 */
 bool Body::isSphere() const {
-    return (geometry == InvalidResource) && (semiAxes.x() == semiAxes.y()) && (semiAxes.x() == semiAxes.z());
+    return (geometry.empty()) && (semiAxes.x() == semiAxes.y()) && (semiAxes.x() == semiAxes.z());
 }
 
 /*! Return true if the body is ellipsoidal, with geometry determined
  *  completely by its semiaxes rather than a triangle based model.
  */
 bool Body::isEllipsoid() const {
-    return geometry == InvalidResource;
+    return geometry.empty();
 }
 
 void Body::setRings(const RingSystem& _rings) {
@@ -564,7 +564,6 @@ void Body::computeLocations() {
     }
 #endif
 }
-
 
 /*! Add a new reference mark.
  */

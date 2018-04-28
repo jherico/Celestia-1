@@ -1,14 +1,17 @@
 #include "CelestiaVrApplication.h"
 
-#include <QtGui/QWindow>
-#include <QtCore/QTimer>
 #include <QtCore/QDateTime>
+#include <QtCore/QTimer>
+#include <QtCore/QTimeZone>
+
+#include <QtGui/QWindow>
 
 #include <vks/context.hpp>
 #include <celapp/celestiacore.h>
 #include <celutil/debug.h>
 
 #include "Logging.h"
+#include "VulkanRenderer.h"
 
 class AppProgressNotifier : public ProgressNotifier {
 public:
@@ -17,59 +20,54 @@ public:
     void update(const std::string& s) { qDebug() << s.c_str(); }
 };
 
-#define timezone 1
-#define daylight 8
-#define tzname "tzname"
-
 CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiApplication(argc, argv) {
     qInstallMessageHandler(messageHandler);
     setApplicationName("CelestiaVR");
     SetDebugVerbosity(5);
 
-    _window = new QWindow();
-    _window->show();
-    _window->setIcon(QIcon(":/images/celestia.png"));
-
     _timer = new QTimer();
     _timer->setInterval(15);
     connect(_timer, &QTimer::timeout, this, &CelestiaVrApplication::onTimer);
     _timer->start();
-    _vkContext = std::make_shared<vks::Context>();
+
+    auto now = QDateTime::currentDateTime();
+    auto timespec = now.timeSpec();
+    auto tz = now.timeZone();
+    auto timezoneBias = now.offsetFromUtc();
+    double curtime = (double)now.toMSecsSinceEpoch() / 1000.0;
+    auto curtimeUnix = time(nullptr);
+
+
     _celestiaCore = std::make_shared<CelestiaCore>();
     QObject::connect(this, &QGuiApplication::aboutToQuit, this, &CelestiaVrApplication::onAboutToQuit);
-    //_celestiaCore->initSimulation("", {}, std::make_shared<AppProgressNotifier>());
-
-    QDateTime now = QDateTime::currentDateTime();
-    auto timespec = now.timeSpec();
-    auto offset = now.offsetFromUtc();
-    time_t curtime = now.toMSecsSinceEpoch();
+    _celestiaCore->initSimulation("", {}, std::make_shared<AppProgressNotifier>());
+    qDebug() << "Init";
 
     // Set up the default time zone name and offset from UTC
-    time_t curtime = time(NULL);
-    _celestiaCore->start(astro::UTCtoTDB((double)curtime / 86400.0 + (double)astro::Date(1970, 1, 1)));
-    localtime(&curtime);  // Only doing this to set timezone as a side effect
-    _celestiaCore->setTimeZoneBias(-timezone + 3600 * daylight);
-    _celestiaCore->setTimeZoneName("temp");
+    _celestiaCore->start(astro::UTCtoTDB(curtime / 86400.0 + (double)astro::Date(1970, 1, 1)));
+    _celestiaCore->setTimeZoneBias(timezoneBias);
+    _celestiaCore->setTimeZoneName(tz.abbreviation(now).toStdString());
 
-    //// If LocalTime is set to false, set the time zone bias to zero.
-    //if (settings.contains("LocalTime")) {
-    //    bool useLocalTime = settings.value("LocalTime").toBool();
-    //    if (!useLocalTime)
-    //        _celestiaCore->setTimeZoneBias(0);
-    //}
+    _window = new QWindow();
+    _window->setGeometry(100, -1000, 800, 600);
+    _window->show();
+    _window->setIcon(QIcon(":/images/celestia.png"));
 
-    //if (settings.contains("TimeZoneName")) {
-    //    m_appCore->setTimeZoneName(settings.value("TimeZoneName").toString().toUtf8().data());
-    //}
-
+    _celestiaCore->setRenderer(std::make_shared<VulkanRenderer>(_window));
 }
 
 
 
 void CelestiaVrApplication::onTimer() {
-    //_celestiaCore->tick();
+    if (_aboutToQuit) {
+        return;
+    }
+    _celestiaCore->tick();
+    _celestiaCore->render();
 }
 
 void CelestiaVrApplication::onAboutToQuit() {
+    _aboutToQuit = true;
     _timer->stop();
+    _celestiaCore->setRenderer(nullptr);
 }

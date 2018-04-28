@@ -39,7 +39,7 @@ Universe::~Universe() {
 }
 
 // Return the planetary system of a star, or NULL if it has no planets.
-SolarSystemPtr Universe::getSolarSystem(const StarPtr& star) const {
+SolarSystemPtr Universe::getSolarSystem(const StarConstPtr& star) const {
     if (star == NULL)
         return NULL;
 
@@ -146,7 +146,7 @@ public:
 public:
     float maxDistance;
     float closestDistance;
-    StarPtr closestStar;
+    StarConstPtr closestStar;
     UniverseConstPtr universe;
     bool withPlanets;
 };
@@ -157,7 +157,7 @@ ClosestStarFinder::ClosestStarFinder(float _maxDistance, const UniverseConstPtr&
 
 void ClosestStarFinder::process(const StarPtr& star, float distance, float) {
     if (distance < closestDistance) {
-        if (!withPlanets || universe->getSolarSystem(star)) {
+        if (!withPlanets || universe->getSolarSystem(std::static_pointer_cast<const Star>(star))) {
             closestStar = star;
             closestDistance = distance;
         }
@@ -166,16 +166,16 @@ void ClosestStarFinder::process(const StarPtr& star, float distance, float) {
 
 class NearStarFinder : public StarHandler {
 public:
-    NearStarFinder(float _maxDistance, vector<StarPtr>& nearStars);
+    NearStarFinder(float _maxDistance, vector<StarConstPtr>& nearStars);
     ~NearStarFinder(){};
     void process(const StarPtr& star, float distance, float appMag) override;
 
 private:
     float maxDistance;
-    vector<StarPtr>& nearStars;
+    vector<StarConstPtr>& nearStars;
 };
 
-NearStarFinder::NearStarFinder(float _maxDistance, vector<StarPtr>& _nearStars) :
+NearStarFinder::NearStarFinder(float _maxDistance, vector<StarConstPtr>& _nearStars) :
     maxDistance(_maxDistance), nearStars(_nearStars) {
 }
 
@@ -685,7 +685,7 @@ Selection Universe::findChildObject(const Selection& sel, const string& name, bo
 // system.  For locations and planets, the context additionally includes
 // sibling or child locations, respectively.
 Selection Universe::findObjectInContext(const Selection& sel, const string& name, bool i18n) const {
-    BodyPtr contextBody = NULL;
+    BodyConstPtr contextBody = NULL;
 
     switch (sel.getType()) {
         case Selection::Type_Body:
@@ -879,7 +879,7 @@ SolarSystemPtr Universe::getNearestSolarSystem(const UniversalCoord& position) c
     return getSolarSystem(closestFinder.closestStar);
 }
 
-void Universe::getNearStars(const UniversalCoord& position, float maxDistance, vector<StarPtr>& nearStars) const {
+void Universe::getNearStars(const UniversalCoord& position, float maxDistance, vector<StarConstPtr>& nearStars) const {
     Vector3f pos = position.toLy().cast<float>();
     NearStarFinder finder(1.0f, nearStars);
     starCatalog->findCloseStars(finder, pos, maxDistance);

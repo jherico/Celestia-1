@@ -29,6 +29,7 @@
 
 #include <celastro/astro.h>
 
+#include "atmosphere.h"
 #include "boundaries.h"
 #include "asterism.h"
 #include "renderinfo.h"
@@ -200,9 +201,9 @@ inline float sizeFade(float screenSize, float minScreenSize, float opaqueScale) 
 // fast testing of object visibility.  The function takes the vertical FOV (in
 // degrees) as an argument. When computing the view cone, we want the field of
 // view as measured on the diagonal between viewport corners.
-double computeCosViewConeAngle(double verticalFOV, double width, double height) {
+double computeCosViewConeAngle(double verticalFOV, double aspect) {
     double h = tan(degToRad(verticalFOV / 2));
-    double diag = sqrt(1.0 + square(h) + square(h * width / height));
+    double diag = sqrt(1.0 + square(h) + square(h * aspect));
     return 1.0 / diag;
 }
 
@@ -211,13 +212,12 @@ double computeCosViewConeAngle(double verticalFOV, double width, double height) 
 /**** End star vertex buffer classes ****/
 
 Renderer::Renderer() :
-    windowWidth(0), windowHeight(0), fov(FOV), cosViewConeAngle(computeCosViewConeAngle(fov, 1, 1)), screenDpi(96),
     corrFac(1.12f), faintestAutoMag45deg(8.0f),  //def. 7.0f
     labelMode(LocationLabels),                   //def. NoLabels
     renderFlags(ShowStars | ShowPlanets), orbitMask(Body::Planet | Body::Moon | Body::Stellar), ambientLightLevel(0.1f),
-    fragmentShaderEnabled(false), vertexShaderEnabled(false), brightnessBias(0.0f), saturationMagNight(1.0f),
-    saturationMag(1.0f), starStyle(FuzzyPointStars), lastOrbitCacheFlush(0), minOrbitSize(MinOrbitSizeForLabel),
-    distanceLimit(1.0e6f), minFeatureSize(MinFeatureSizeForLabel), locationFilter(~0u), colorTemp(NULL), settingsChanged(true) {
+    brightnessBias(0.0f), saturationMagNight(1.0f), saturationMag(1.0f), lastOrbitCacheFlush(0),
+    minOrbitSize(MinOrbitSizeForLabel), distanceLimit(1.0e6f), minFeatureSize(MinFeatureSizeForLabel), locationFilter(~0u),
+    colorTemp(NULL), settingsChanged(true) {
     skyContour = new SkyContourPoint[MaxSkySlices + 1];
     colorTemp = GetStarColorTable(ColorTable_Blackbody_D65);
 }
@@ -266,11 +266,6 @@ bool Renderer::Annotation::operator<(const Annotation& a) const {
 bool Renderer::OrbitPathListEntry::operator<(const Renderer::OrbitPathListEntry& o) const {
     // Operation is reversed because -z axis points into the screen
     return centerZ - radius > o.centerZ - o.radius;
-}
-
-bool Renderer::init(int winWidth, int winHeight, DetailOptions& _detailOptions) {
-    detailOptions = _detailOptions;
-    return true;
 }
 
 void Renderer::setFaintestAM45deg(float _faintestAutoMag45deg) {
@@ -499,6 +494,7 @@ static Vector3d astrocentricPosition(const UniversalCoord& pos, const Star& star
 }
 
 void Renderer::autoMag(float& faintestMag) {
+    float fov = 0;
     float fieldCorr = 2.0f * FOV / (fov + FOV);
     faintestMag = (float)(faintestAutoMag45deg * sqrt(fieldCorr));
     saturationMag = saturationMagNight * (1.0f + fieldCorr * fieldCorr);
@@ -507,20 +503,20 @@ void Renderer::autoMag(float& faintestMag) {
 // Set up the light sources for rendering a solar system.  The positions of
 // all nearby stars are converted from universal to viewer-centered
 // coordinates.
-static void setupLightSources(const vector<const Star*>& nearStars,
+static void setupLightSources(const vector<StarConstPtr>& nearStars,
                               const UniversalCoord& observerPos,
                               double t,
                               vector<LightSource>& lightSources,
                               int renderFlags) {
     lightSources.clear();
 
-    for (vector<const Star*>::const_iterator iter = nearStars.begin(); iter != nearStars.end(); iter++) {
-        if ((*iter)->getVisibility()) {
-            Vector3d v = (*iter)->getPosition(t).offsetFromKm(observerPos);
+    for (auto star : nearStars) {
+        if (star->getVisibility()) {
+            Vector3d v = star->getPosition(t).offsetFromKm(observerPos);
             LightSource ls;
             ls.position = v;
-            ls.luminosity = (*iter)->getLuminosity();
-            ls.radius = (*iter)->getRadius();
+            ls.luminosity = star->getLuminosity();
+            ls.radius = star->getRadius();
 
             if (renderFlags & Renderer::ShowTintedIllumination) {
                 // If the star is sufficiently cool, change the light color
@@ -530,7 +526,7 @@ static void setupLightSources(const vector<const Star*>& nearStars,
                 // assign a slight bluish tint to light from O and B type stars,
                 // though these will almost never have planets for their light
                 // to shine upon.
-                float temp = (*iter)->getTemperature();
+                float temp = star->getTemperature();
                 if (temp > 30000.0f)
                     ls.color = Color(0.8f, 0.8f, 1.0f);
                 else if (temp > 10000.0f)
@@ -569,35 +565,25 @@ static void setupSecondaryLightSources(vector<SecondaryIlluminator>& secondaryIl
     }
 }
 
-#if 0
 void Renderer::draw(const Observer& observer, const Universe& universe, float faintestMagNight, const Selection& sel) {
     // Get the observer's time
     double now = observer.getTime();
     realTime = observer.getRealTime();
-
-    frameCount++;
     settingsChanged = false;
 
     // Compute the size of a pixel
-    setFieldOfView(radToDeg(observer.getFOV()));
-    pixelSize = calcPixelSize(fov, (float)windowHeight);
+    auto fov = radToDeg(observer.getFOV());
+    corrFac = (0.12f * fov / FOV * fov / FOV + 1.0f);
+    cosViewConeAngle = computeCosViewConeAngle(fov, 800.0 / 600.0);
+    invCosViewAngle = 1.0 / cosViewConeAngle;
+    sinViewAngle = sqrt(1.0 - square(cosViewConeAngle));
 
-    // Set up the projection we'll use for rendering stars.
-    gluPerspective(fov, (float)windowWidth / (float)windowHeight, NEAR_DIST, FAR_DIST);
 
-    // Set the modelview matrix
-    glMatrixMode(GL_MODELVIEW);
-
+    float viewAspectRatio = 1.0f;
     // Get the displayed surface texture set to use from the observer
     displayedSurface = observer.getDisplayedSurface();
 
     locationFilter = observer.getLocationFilter();
-
-    if (usePointSprite && getGLContext()->getVertexProcessor() != NULL) {
-        useNewStarRendering = true;
-    } else {
-        useNewStarRendering = false;
-    }
 
     // Highlight the selected object
     highlightObject = sel;
@@ -605,7 +591,6 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
     m_cameraOrientation = observer.getOrientationf();
 
     // Get the view frustum used for culling in camera space.
-    float viewAspectRatio = (float)windowWidth / (float)windowHeight;
     Frustum frustum(degToRad(fov), viewAspectRatio, MinNearPlaneDistance);
 
     // Get the transformed frustum, used for culling in the astrocentric coordinate
@@ -616,13 +601,6 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
     // Set up the camera for star rendering; the units of this phase
     // are light years.
     Vector3f observerPosLY = observer.getPosition().offsetFromLy(Vector3f::Zero());
-    glPushMatrix();
-    glRotate(m_cameraOrientation);
-
-    // Get the model matrix *before* translation.  We'll use this for
-    // positioning star and planet labels.
-    glGetDoublev(GL_MODELVIEW_MATRIX, modelMatrix);
-    glGetDoublev(GL_PROJECTION_MATRIX, projMatrix);
 
     clearSortedAnnotations();
 
@@ -653,11 +631,10 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
 
         // Traverse the frame trees of each nearby solar system and
         // build the list of objects to be rendered.
-        for (vector<const Star*>::const_iterator iter = nearStars.begin(); iter != nearStars.end(); iter++) {
-            const Star* sun = *iter;
-            SolarSystem* solarSystem = universe.getSolarSystem(sun);
+        for (const auto& sun : nearStars) {
+            auto solarSystem = universe.getSolarSystem(sun);
             if (solarSystem != NULL) {
-                FrameTree* solarSysTree = solarSystem->getFrameTree();
+                const auto& solarSysTree = solarSystem->getFrameTree();
                 if (solarSysTree != NULL) {
                     if (solarSysTree->updateRequired()) {
                         // Tree has changed, so we must recompute bounding spheres.
@@ -678,14 +655,12 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
                 }
             }
 
-            addStarOrbitToRenderList(*sun, observer, now);
+            addStarOrbitToRenderList(sun, observer, now);
         }
 
         if ((labelMode & (BodyLabelMask)) != 0) {
             buildLabelLists(xfrustum, now);
         }
-
-        starTex->bind();
     }
 
     setupSecondaryLightSources(secondaryIlluminators, lightSourceList);
@@ -698,21 +673,22 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
     // limiting magnitude of stars (so stars aren't visible in the daytime
     // on planets with thick atmospheres.)
     if ((renderFlags & ShowAtmospheres) != 0) {
-        for (vector<RenderListEntry>::iterator iter = renderList.begin(); iter != renderList.end(); iter++) {
-            if (iter->renderableType == RenderListEntry::RenderableBody && iter->body->getAtmosphere() != NULL) {
+        for (const auto& rle : renderList) {
+            if (rle.renderableType == RenderListEntry::RenderableBody && rle.body->getAtmosphere() != NULL) {
+                const auto& body = rle.body;
                 // Compute the density of the atmosphere, and from that
                 // the amount light scattering.  It's complicated by the
                 // possibility that the planet is oblate and a simple distance
                 // to sphere calculation will not suffice.
-                const Atmosphere* atmosphere = iter->body->getAtmosphere();
-                float radius = iter->body->getRadius();
-                Vector3f semiAxes = iter->body->getSemiAxes() / radius;
+                auto atmosphere = body->getAtmosphere();
+                float radius = body->getRadius();
+                Vector3f semiAxes = body->getSemiAxes() / radius;
 
                 Vector3f recipSemiAxes = semiAxes.cwiseInverse();
-                Vector3f eyeVec = iter->position / radius;
+                Vector3f eyeVec = rle.position / radius;
 
                 // Compute the orientation of the planet before axial rotation
-                Quaterniond qd = iter->body->getEclipticToEquatorial(now);
+                Quaterniond qd = body->getEclipticToEquatorial(now);
                 Quaternionf q = qd.cast<float>();
                 eyeVec = q * eyeVec;
 
@@ -726,8 +702,8 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
                     if (density > 1.0f)
                         density = 1.0f;
 
-                    Vector3f sunDir = iter->sun.normalized();
-                    Vector3f normal = -iter->position.normalized();
+                    Vector3f sunDir = rle.sun.normalized();
+                    Vector3f normal = -rle.position.normalized();
                     float illumination = Math<float>::clamp(sunDir.dot(normal) + 0.2f);
 
                     float lightness = illumination * density;
@@ -752,22 +728,8 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
 
 
     ambientColor = Color(ambientLightLevel, ambientLightLevel, ambientLightLevel);
-
-    // Create the ambient light source.  For realistic scenes in space, this
-    // should be black.
-    glAmbientLightColor(ambientColor);
-
-    glClearColor(skyColor.red(), skyColor.green(), skyColor.blue(), 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-    glDisable(GL_LIGHTING);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glEnable(GL_TEXTURE_2D);
-
     // Render sky grids first--these will always be in the background
+#if 0
     {
         glDisable(GL_TEXTURE_2D);
         if ((renderFlags & ShowSmoothLines) != 0)
@@ -1126,10 +1088,6 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
                 zNearest = -depthSortedAnnotations[0].position.z() * 0.999f;
         }
 
-#if DEBUG_COALESCE
-        clog << "nEntries: " << nEntries << ",   zNearest: " << zNearest << ",   prevNear: " << prevNear << "\n";
-#endif
-
         // If the nearest distance wasn't set, nothing should appear
         // in the frontmost depth buffer interval (so we can set the near plane
         // of the front interval to whatever we want as long as it's less than
@@ -1303,8 +1261,8 @@ void Renderer::draw(const Observer& observer, const Universe& universe, float fa
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     glEnable(GL_LIGHTING);
-}
 #endif
+}
 
 // Helper function to compute the luminosity of a perfectly
 // reflective disc with the specified radius. This is used as an upper
@@ -1375,12 +1333,10 @@ void Renderer::buildRenderLists(const Vector3d& astrocentricObserverPos,
                                 const FrameTreePtr& tree,
                                 const Observer& observer,
                                 double now) {
-    int labelClassMask = translateLabelModeToClassMask(labelMode);
 
+    int labelClassMask = translateLabelModeToClassMask(labelMode);
     Matrix3f viewMat = observer.getOrientationf().toRotationMatrix();
     Vector3f viewMatZ = viewMat.row(2);
-    double invCosViewAngle = 1.0 / cosViewConeAngle;
-    double sinViewAngle = sqrt(1.0 - square(cosViewConeAngle));
 
     auto nChildren = tree ? tree->childCount() : 0;
     for (unsigned int i = 0; i < nChildren; i++) {
@@ -1426,10 +1382,6 @@ void Renderer::buildRenderLists(const Vector3d& astrocentricObserverPos,
                 if (perpDistSq < maxPerpDist * maxPerpDist) {
                     if ((body->getRadius() / (float)pos_v.norm()) / pixelSize > PLANETSHINE_PIXEL_SIZE_LIMIT) {
                         // add to planetshine list if larger than 1/10 pixel
-#if DEBUG_SECONDARY_ILLUMINATION
-                        clog << "Planetshine: " << body->getName() << ", "
-                             << body->getRadius() / (float)pos_v.length() / pixelSize << endl;
-#endif
                         SecondaryIlluminator illum;
                         illum.body = body;
                         illum.position_v = pos_v;
@@ -1655,7 +1607,7 @@ void Renderer::buildOrbitLists(const Vector3d& astrocentricObserverPos,
 
 void Renderer::buildLabelLists(const Frustum& viewFrustum, double now) {
     int labelClassMask = translateLabelModeToClassMask(labelMode);
-    BodyPtr lastPrimary;
+    BodyConstPtr lastPrimary;
     Sphered primarySphere;
 
     for (const auto& rle : renderList) {
@@ -1785,7 +1737,7 @@ void Renderer::buildLabelLists(const Frustum& viewFrustum, double now) {
 }
 
 // Add a star orbit to the render list
-void Renderer::addStarOrbitToRenderList(const StarPtr& star, const Observer& observer, double now) {
+void Renderer::addStarOrbitToRenderList(const StarConstPtr& star, const Observer& observer, double now) {
     // If the star isn't fixed, add its orbit to the render list
     if ((renderFlags & ShowOrbits) != 0 && ((orbitMask & Body::Stellar) != 0 || highlightObject.star() == star)) {
         Matrix3d viewMat = observer.getOrientation().toRotationMatrix();
@@ -1813,11 +1765,6 @@ void Renderer::addStarOrbitToRenderList(const StarPtr& star, const Observer& obs
             }
         }
     }
-}
-
-void Renderer::setStarStyle(StarStyle style) {
-    starStyle = style;
-    markSettingsChanged();
 }
 
 void Renderer::notifyWatchers() const {

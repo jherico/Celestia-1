@@ -23,35 +23,6 @@ using namespace std;
 // are Julian days.
 static const double VELOCITY_DIFF_DELTA = 1.0 / 1440.0;
 
-Selection::Selection(const StarPtr& star) : type(star ? Type_Star : Type_Nil), obj(star) {
-}
-Selection::Selection(const BodyPtr& body) : type(body ? Type_Body : Type_Nil), obj(body) {
-}
-Selection::Selection(const DeepSkyObjectPtr& deepsky) : type(deepsky ? Type_DeepSky : Type_Nil), obj(deepsky) {
-}
-Selection::Selection(const LocationPtr& location) : type(location ? Type_Location : Type_Nil), obj(location) {
-}
-
-Selection::Type Selection::getType() const {
-    return type;
-}
-
-StarPtr Selection::star() const {
-    return type == Type_Star ? std::static_pointer_cast<Star>(obj) : NULL;
-}
-
-BodyPtr Selection::body() const {
-    return type == Type_Body ? std::static_pointer_cast<Body>(obj) : NULL;
-}
-
-DeepSkyObjectPtr Selection::deepsky() const {
-    return type == Type_DeepSky ? std::static_pointer_cast<DeepSkyObject>(obj) : NULL;
-}
-
-LocationPtr Selection::location() const {
-    return type == Type_Location ? std::static_pointer_cast<Location>(obj) : NULL;
-}
-
 double Selection::radius() const {
     switch (type) {
         case Type_Star:

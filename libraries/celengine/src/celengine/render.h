@@ -78,30 +78,17 @@ public:
     Renderer();
     ~Renderer();
 
-    struct DetailOptions {
-        unsigned int ringSystemSections{ 100 };
-        unsigned int orbitPathSamplePoints{ 100 };
-        unsigned int shadowTextureSize{ 256 };
-        unsigned int eclipseTextureSize{ 128 };
-        double orbitWindowEnd{ 0.5 };
-        double orbitPeriodsShown{ 1.0 };
-        double linearFadeFraction{ 0.0 };
-    };
+    virtual void initialize() {};
+    virtual void shutdown() {};
 
-    bool init(int, int, DetailOptions&);
-    void shutdown(){};
-
-    float calcPixelSize(float fov, float windowHeight);
     void setFaintestAM45deg(float);
     float getFaintestAM45deg() const;
-
     void setRenderMode(int);
     void autoMag(float& faintestMag);
-#if 0
-    void render(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
-    void draw(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
-#endif
 
+    void draw(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
+
+    virtual void render(const ObserverPtr&, const UniversePtr&, float faintestVisible, const Selection& sel) = 0;
     enum
     {
         NoLabels = 0x000,
@@ -136,7 +123,6 @@ public:
         ShowCelestialSphere = 0x0040,
         ShowNightMaps = 0x0080,
         ShowAtmospheres = 0x0100,
-        ShowSmoothLines = 0x0200,
         ShowEclipseShadows = 0x0400,
         ShowStarsAsPoints = 0x0800,
         ShowRingShadows = 0x1000,
@@ -187,8 +173,6 @@ public:
     void setOrbitMask(int);
     const ColorTemperatureTable* getStarColorTable() const;
     void setStarColorTable(const ColorTemperatureTable*);
-    void setStarStyle(StarStyle style);
-    StarStyle getStarStyle() const { return starStyle; }
 
     // Label related methods
     enum LabelAlignment
@@ -367,7 +351,7 @@ private:
 
     void addRenderListEntries(RenderListEntry& rle, const BodyPtr& body, bool isLabeled);
 
-    void addStarOrbitToRenderList(const StarPtr& star, const Observer& observer, double now);
+    void addStarOrbitToRenderList(const StarConstPtr& star, const Observer& observer, double now);
 
     void addAnnotation(std::vector<Annotation>&,
                        const MarkerRepresentationPtr&,
@@ -378,12 +362,7 @@ private:
                        LabelVerticalAlignment = VerticalAlignBottom,
                        float size = 0.0f);
 
-private:
-    int windowWidth;
-    int windowHeight;
-    float fov;
-    double cosViewConeAngle;
-    int screenDpi;
+protected:
     float corrFac;
     float pixelSize;
     float faintestAutoMag45deg;
@@ -393,8 +372,6 @@ private:
     int renderFlags;
     int orbitMask;
     float ambientLightLevel;
-    bool fragmentShaderEnabled;
-    bool vertexShaderEnabled;
     float brightnessBias;
 
     float brightnessScale;
@@ -402,7 +379,6 @@ private:
     float faintestPlanetMag;
     float saturationMagNight;
     float saturationMag;
-    StarStyle starStyle;
 
     Color ambientColor;
     std::string displayedSurface;
@@ -420,7 +396,6 @@ private:
     LightingState::EclipseShadowVector eclipseShadows[MaxLights];
     std::vector<StarConstPtr> nearStars;
     std::vector<LightSource> lightSourceList;
-    DetailOptions detailOptions;
     int currentIntervalIndex;
 
 private:
@@ -435,6 +410,10 @@ private:
     Selection highlightObject;
     bool settingsChanged;
     double realTime;
+
+    double cosViewConeAngle;
+    double invCosViewAngle;
+    double sinViewAngle;
 
     // Location markers
 public:

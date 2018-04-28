@@ -15,6 +15,14 @@
 
 using namespace std;
 
+std::string toUpperStr(const std::string& s) {
+    std::string result = s;
+    for (auto& c : result) {
+        c = toupper(c);
+    }
+    return result;
+}
+
 int compareIgnoringCase(const string& s1, const string& s2) {
     string::const_iterator i1 = s1.begin();
     string::const_iterator i2 = s2.begin();

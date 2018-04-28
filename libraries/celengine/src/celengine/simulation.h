@@ -42,16 +42,19 @@ public:
 
     const UniversePtr& getUniverse() const { return universe; }
 
-    void orbit(const Eigen::Quaternionf& q);
-    void rotate(const Eigen::Quaternionf& q);
+    // Orbit around the selection (if there is one.)  This involves changing
+    // both the observer's position and orientation.
+    void orbit(const Eigen::Quaternionf& q) { activeObserver->orbit(selection, q); }
+    // Rotate the observer about its center.
+    void rotate(const Eigen::Quaternionf& q) { activeObserver->rotate(q); }
     void changeOrbitDistance(float d);
-    void setTargetSpeed(float s);
-    float getTargetSpeed();
+    void setTargetSpeed(float s) { activeObserver->setTargetSpeed(s); }
+    float getTargetSpeed() { return activeObserver->getTargetSpeed(); }
 
-    Selection getSelection() const;
-    void setSelection(const Selection&);
-    Selection getTrackedObject() const;
-    void setTrackedObject(const Selection&);
+    const Selection& getSelection() const { return selection; }
+    void setSelection(const Selection& sel) { selection = sel; }
+    const Selection& getTrackedObject() const { return activeObserver->getTrackedObject(); }
+    void setTrackedObject(const Selection& sel) { activeObserver->setTrackedObject(sel); }
 
     void selectPlanet(int);
     Selection findObject(std::string s, bool i18n = false);
@@ -72,12 +75,12 @@ public:
     void cancelMotion();
 
     Observer& getObserver() { return *activeObserver; }
-    void setObserverPosition(const UniversalCoord&);
-    void setObserverOrientation(const Eigen::Quaternionf&);
+    void setObserverPosition(const UniversalCoord& pos) { activeObserver->setPosition(pos); }
+    void setObserverOrientation(const Eigen::Quaternionf& orientation) { activeObserver->setOrientation(orientation); }
     void reverseObserverOrientation() { activeObserver->reverseOrientation(); }
 
     const ObserverPtr& addObserver();
-    void removeObserver(const ObserverPtr&);
+    void removeObserver(const ObserverPtr& o) { std::remove(observers.begin(), observers.end(), o); }
     const ObserverPtr& getActiveObserver() { return activeObserver; }
     void setActiveObserver(const ObserverPtr&);
     const SolarSystemPtr& getNearestSolarSystem() const { return closestSolarSystem; }
@@ -93,12 +96,13 @@ public:
     float getFaintestVisible() const { return faintestVisible; }
     void setFaintestVisible(float magnitude) { faintestVisible = magnitude; }
 
-    void setObserverMode(Observer::ObserverMode);
-    Observer::ObserverMode getObserverMode() const;
-
-    void setFrame(ObserverFrame::CoordinateSystem, const Selection& refObject, const Selection& targetObject);
-    void setFrame(ObserverFrame::CoordinateSystem, const Selection& refObject);
-    const ObserverFramePtr& getFrame() const;
+    void setObserverMode(Observer::ObserverMode mode) { activeObserver->setMode(mode); }
+    Observer::ObserverMode getObserverMode() const { return activeObserver->getMode(); }
+    void setFrame(ObserverFrame::CoordinateSystem c, const Selection& r, const Selection& t) {
+        activeObserver->setFrame(c, r, t);
+    }
+    void setFrame(ObserverFrame::CoordinateSystem c, const Selection& r) { activeObserver->setFrame(c, r); }
+    const ObserverFramePtr& getFrame() const { return activeObserver->getFrame(); }
 
 private:
     SolarSystemPtr getSolarSystem(const StarPtr& star);

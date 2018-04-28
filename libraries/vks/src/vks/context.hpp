@@ -258,12 +258,16 @@ public:
         }
 
         destroyCommandPool();
-        device.destroyPipelineCache(pipelineCache);
+        device.destroy(pipelineCache);
         device.destroy();
         if (enableValidation) {
             debug::freeDebugCallback(instance);
         }
         instance.destroy();
+        s_cmdPool = nullptr;
+        queue = nullptr;
+        device = nullptr;
+        instance = nullptr;
     }
 
     uint32_t findQueue(const vk::QueueFlags& desiredFlags, const vk::SurfaceKHR& presentSurface = nullptr) const {

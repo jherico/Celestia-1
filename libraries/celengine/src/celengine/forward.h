@@ -6,6 +6,7 @@ class Object {
 };
 
 using ObjectPtr = std::shared_ptr<Object>;
+using ObjectConstPtr = std::shared_ptr<const Object>;
 
 class Atmosphere;
 using AtmospherePtr = std::shared_ptr<Atmosphere>;
@@ -16,12 +17,14 @@ class ConstellationBoundaries;
 using ConstellationBoundariesPtr = std::shared_ptr<ConstellationBoundaries>;
 class DeepSkyObject;
 using DeepSkyObjectPtr = std::shared_ptr<DeepSkyObject>;
+using DeepSkyObjectConstPtr = std::shared_ptr<const DeepSkyObject>;
 class DSODatabase;
 using DSODatabasePtr = std::shared_ptr<DSODatabase>;
 class FrameTree;
 using FrameTreePtr = std::shared_ptr<FrameTree>;
 class Location;
 using LocationPtr = std::shared_ptr<Location>;
+using LocationConstPtr = std::shared_ptr<const Location>;
 class Observer;
 using ObserverPtr = std::shared_ptr<Observer>;
 class ObserverFrame;
@@ -33,6 +36,8 @@ using PlanetarySystemPtr = std::shared_ptr<PlanetarySystem>;
 class ReferenceFrame;
 using ReferenceFramePtr = std::shared_ptr<ReferenceFrame>;
 using ReferenceFrameConstPtr = std::shared_ptr<const ReferenceFrame>;
+class Renderer;
+using RendererPtr = std::shared_ptr<Renderer>;
 class RingSystem;
 using RingSystemPtr = std::shared_ptr<RingSystem>;
 class ReferenceMark;

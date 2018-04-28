@@ -60,12 +60,12 @@ private:
     //using StaticPtr = ;
     //using StaticPtrArray = std::array<StaticPtr, 8>;
 
-    using LimitingFactorPredicate = std::function<bool(const ObjectPtr&, const float)>;
-    using StraddlingPredicate = std::function<bool(const PointType&, const ObjectPtr&, const float)>;
+    using LimitingFactorPredicate = std::function<bool(const ObjectPtr&, const PREC)>;
+    using StraddlingPredicate = std::function<bool(const PointType&, const ObjectPtr&, const PREC)>;
     using ExclusionFactorDecayFunction = std::function<PREC(const PREC)>;
 
 public:
-    DynamicOctree(const PointType& cellCenterPos, const float exclusionFactor) :
+    DynamicOctree(const PointType& cellCenterPos, const PREC exclusionFactor) :
         cellCenterPos(cellCenterPos), exclusionFactor(exclusionFactor) {}
 
     ~DynamicOctree() {}

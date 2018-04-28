@@ -99,39 +99,27 @@ vector<string> DSODatabase::getCompletion(const string& name) const {
         return completion;
 }
 
-string DSODatabase::getDSOName(const DeepSkyObject::Pointer& dso, bool i18n) const {
+string DSODatabase::getDSOName(const DeepSkyObjectConstPtr& dso, bool i18n) const {
     uint32_t catalogNumber = dso->getCatalogNumber();
-
     if (namesDB != NULL) {
-        DSONameDatabase::NumberIndex::const_iterator iter = namesDB->getFirstNameIter(catalogNumber);
-        if (iter != namesDB->getFinalNameIter() && iter->first == catalogNumber) {
-            if (i18n && iter->second != _(iter->second.c_str()))
-                return _(iter->second.c_str());
-            else
-                return iter->second;
+        const auto& names = namesDB->getNamesByCatalogNumber(catalogNumber);
+        if (!names.empty()) {
+            return i18n ? names.front() : _(names.front());
         }
     }
 
     return "";
 }
 
-string DSODatabase::getDSONameList(const DeepSkyObject::Pointer& dso, const uint32_t maxNames) const {
+string DSODatabase::getDSONameList(const DeepSkyObjectConstPtr& dso, const uint32_t maxNames) const {
     string dsoNames;
 
     uint32_t catalogNumber = dso->getCatalogNumber();
 
-    DSONameDatabase::NumberIndex::const_iterator iter = namesDB->getFirstNameIter(catalogNumber);
-
-    uint32_t count = 0;
-    while (iter != namesDB->getFinalNameIter() && iter->first == catalogNumber && count < maxNames) {
-        if (count != 0)
-            dsoNames += " / ";
-
-        dsoNames += iter->second;
-        ++iter;
-        ++count;
+    if (namesDB) {
+        const auto& names = namesDB->getNamesByCatalogNumber(catalogNumber);
+        concatenate(names.begin(), names.end(), " / ");
     }
-
     return dsoNames;
 }
 

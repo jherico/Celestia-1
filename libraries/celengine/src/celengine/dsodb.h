@@ -48,8 +48,8 @@ public:
 
     void findCloseDSOs(DSOHandler& dsoHandler, const Eigen::Vector3d& obsPosition, float radius) const;
 
-    std::string getDSOName(const DeepSkyObject::Pointer&, bool i18n = false) const;
-    std::string getDSONameList(const DeepSkyObject::Pointer&, const uint32_t maxNames = MAX_DSO_NAMES) const;
+    std::string getDSOName(const DeepSkyObjectConstPtr&, bool i18n = false) const;
+    std::string getDSONameList(const DeepSkyObjectConstPtr&, const uint32_t maxNames = MAX_DSO_NAMES) const;
 
     const DSONameDatabase::Pointer& getNameDatabase() const { return namesDB; }
     void setNameDatabase(const DSONameDatabase::Pointer& _namesDB) { namesDB = _namesDB; }

@@ -32,10 +32,14 @@ public:
 
 public:
     Selection() : type(Type_Nil) {}
-    Selection(const StarPtr& star);
-    Selection(const BodyPtr& body);
-    Selection(const DeepSkyObjectPtr& deepsky);
-    Selection(const LocationPtr& location);
+    Selection(const StarPtr& star) : type(star ? Type_Star : Type_Nil), obj(star) {}
+    Selection(const BodyPtr& body) : type(body ? Type_Body : Type_Nil), obj(body) {}
+    Selection(const DeepSkyObjectPtr& deepsky) : type(deepsky ? Type_DeepSky : Type_Nil), obj(deepsky) {}
+    Selection(const LocationPtr& location) : type(location ? Type_Location : Type_Nil), obj(location) {}
+//    Selection(const StarConstPtr& star) : type(star ? Type_Star : Type_Nil), obj(star) {}
+//    Selection(const BodyConstPtr& body) : type(body ? Type_Body : Type_Nil), obj(body) {}
+//    Selection(const DeepSkyObjectConstPtr& deepsky) : type(deepsky ? Type_DeepSky : Type_Nil), obj(deepsky) {}
+//    Selection(const LocationConstPtr& location) : type(location ? Type_Location : Type_Nil), obj(location) {}
     Selection(const Selection& sel) : type(sel.type), obj(sel.obj) {}
     ~Selection(){};
 
@@ -54,15 +58,25 @@ public:
 
     bool isVisible() const;
 
-    StarPtr star() const;
+    StarPtr star() const {
+        return type == Type_Star ? std::static_pointer_cast<Star>(obj) : nullptr;
+    }
 
-    BodyPtr body() const;
+    BodyPtr body() const {
+        return type == Type_Body ? std::static_pointer_cast<Body>(obj) : NULL;
+    }
 
-    DeepSkyObjectPtr deepsky() const;
+    DeepSkyObjectPtr deepsky() const {
+        return type == Type_DeepSky ? std::static_pointer_cast<DeepSkyObject>(obj) : NULL;
+    }
 
-    LocationPtr location() const;
+    LocationPtr location() const {
+        return type == Type_Location ? std::static_pointer_cast<Location>(obj) : NULL;
+    }
 
-    Type getType() const;
+    Type getType() const {
+        return type;
+    }
 
     // private:
     Type type;

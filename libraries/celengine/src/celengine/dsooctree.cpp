@@ -37,13 +37,13 @@ uint32_t DynamicOctree<DeepSkyObject, double>::SPLIT_THRESHOLD = 10;
 
 template <>
 DynamicOctree<DeepSkyObject, double>::LimitingFactorPredicate DynamicOctree<DeepSkyObject, double>::limitingFactorPredicate =
-    [](const std::shared_ptr<DeepSkyObject>& _dso, const float absMag) -> bool {
+    [](const std::shared_ptr<DeepSkyObject>& _dso, const double absMag) -> bool {
     return _dso->getAbsoluteMagnitude() <= absMag;
 };
 
 template <>
 DynamicOctree<DeepSkyObject, double>::StraddlingPredicate DynamicOctree<DeepSkyObject, double>::straddlingPredicate =
-    [](const Vector3d& cellCenterPos, const DeepSkyObject::Pointer& _dso, const float) -> bool {
+    [](const Vector3d& cellCenterPos, const DeepSkyObject::Pointer& _dso, const double) -> bool {
     //checks if this dso's radius straddles child nodes
     float dsoRadius = _dso->getBoundingSphereRadius();
 

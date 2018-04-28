@@ -35,8 +35,8 @@ public:
     void setSolarSystemCatalog(const SolarSystemCatalogPtr& catalog) { solarSystemCatalog = catalog; }
     const DSODatabasePtr& getDSOCatalog() const { return dsoCatalog; }
     void setDSOCatalog(const DSODatabasePtr& catalog) { dsoCatalog = catalog; }
-    const AsterismListPtr& getAsterisms() const { return asterisms; }
-    void setAsterisms(const AsterismListPtr& _asterisms) { asterisms = _asterisms; }
+    const AsterismList& getAsterisms() const { return asterisms; }
+    void setAsterisms(const AsterismList& _asterisms) { asterisms = _asterisms; }
     const ConstellationBoundariesPtr& getBoundaries() const { return boundaries; }
     void setBoundaries(const ConstellationBoundariesPtr& _boundaries) { boundaries = _boundaries; }
 
@@ -62,11 +62,14 @@ public:
                                                bool withLocations = false);
 
     SolarSystemPtr getNearestSolarSystem(const UniversalCoord& position) const;
-    SolarSystemPtr getSolarSystem(const StarPtr& star) const;
+    SolarSystemPtr getSolarSystem(const StarPtr& star) const {
+        return getSolarSystem(std::static_pointer_cast<const Star>(star));
+    }
+    SolarSystemPtr getSolarSystem(const StarConstPtr& star) const;
     SolarSystemPtr getSolarSystem(const Selection&) const;
     SolarSystemPtr createSolarSystem(const StarPtr& star) const;
 
-    void getNearStars(const UniversalCoord& position, float maxDistance, std::vector<StarPtr>& stars) const;
+    void getNearStars(const UniversalCoord& position, float maxDistance, std::vector<StarConstPtr>& stars) const;
 
     void markObject(const Selection&,
                     const MarkerRepresentation& rep,
@@ -102,10 +105,10 @@ private:
     StarDatabasePtr starCatalog;
     DSODatabasePtr dsoCatalog;
     SolarSystemCatalogPtr solarSystemCatalog;
-    AsterismListPtr asterisms;
+    AsterismList asterisms;
     ConstellationBoundariesPtr boundaries;
     MarkerList markers;
-    std::vector<StarPtr> closeStars;
+    std::vector<StarConstPtr> closeStars;
 };
 
 #endif  // _CELENGINE_UNIVERSE_H_

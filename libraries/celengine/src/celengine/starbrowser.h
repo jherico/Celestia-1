@@ -29,7 +29,7 @@ public:
 
     StarBrowser();
     StarBrowser(const SimulationPtr& _appSim, int pred = NearestStars);
-    std::vector<StarPtr>&& listStars(uint32_t);
+    std::vector<StarPtr> listStars(uint32_t);
     void setSimulation(const SimulationPtr& );
     const StarPtr nearestStar(void);
     bool setPredicate(int pred);

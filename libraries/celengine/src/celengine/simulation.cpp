@@ -25,38 +25,13 @@ Simulation::Simulation(const UniversePtr& _universe) : universe(_universe) {
 Simulation::~Simulation() {
 }
 
-static StarPtr getSun(const BodyPtr& body) {
+static StarPtr getSun(const BodyConstPtr& body) {
     auto system = body->getSystem();
     if (system == NULL)
         return NULL;
     else
         return system->getStar();
 }
-
-//void Simulation::render(Renderer& renderer)
-//{
-//    renderer.render(*activeObserver,
-//                    *universe,
-//                    faintestVisible,
-//                    selection);
-//}
-//
-//void Simulation::draw(Renderer& renderer)
-//{
-//    renderer.draw(*activeObserver,
-//                  *universe,
-//                  faintestVisible,
-//                  selection);
-//}
-//
-//
-//void Simulation::render(Renderer& renderer, Observer& observer)
-//{
-//    renderer.render(observer,
-//                    *universe,
-//                    faintestVisible,
-//                    selection);
-//}
 
 // Set the time to the specified Julian date
 void Simulation::setTime(double jd) {
@@ -81,22 +56,6 @@ void Simulation::update(double dt) {
     closestSolarSystem = universe->getNearestSolarSystem(activeObserver->getPosition());
 }
 
-Selection Simulation::getSelection() const {
-    return selection;
-}
-
-void Simulation::setSelection(const Selection& sel) {
-    selection = sel;
-}
-
-Selection Simulation::getTrackedObject() const {
-    return activeObserver->getTrackedObject();
-}
-
-void Simulation::setTrackedObject(const Selection& sel) {
-    activeObserver->setTrackedObject(sel);
-}
-
 Selection Simulation::pickObject(const Vector3f& pickRay, int renderFlags, float tolerance) {
     return universe->pick(activeObserver->getPosition(), activeObserver->getOrientationf().conjugate() * pickRay,
                           activeObserver->getTime(), renderFlags, faintestVisible, tolerance);
@@ -104,12 +63,8 @@ Selection Simulation::pickObject(const Vector3f& pickRay, int renderFlags, float
 
 
 const ObserverPtr& Simulation::addObserver() {
-    observers.push_back(std::make_shared<Observer>());
+    observers.emplace_back(std::make_shared<Observer>());
     return observers.back();
-}
-
-void Simulation::removeObserver(const ObserverPtr& o) {
-    std::remove(observers.begin(), observers.end(), o);
 }
 
 void Simulation::setActiveObserver(const ObserverPtr& o) {
@@ -118,57 +73,10 @@ void Simulation::setActiveObserver(const ObserverPtr& o) {
         activeObserver = o;
 }
 
-void Simulation::setObserverPosition(const UniversalCoord& pos) {
-    activeObserver->setPosition(pos);
-}
-
-void Simulation::setObserverOrientation(const Quaternionf& orientation) {
-    activeObserver->setOrientation(orientation);
-}
-
-Observer::ObserverMode Simulation::getObserverMode() const {
-    return activeObserver->getMode();
-}
-
-void Simulation::setObserverMode(Observer::ObserverMode mode) {
-    activeObserver->setMode(mode);
-}
-
-void Simulation::setFrame(ObserverFrame::CoordinateSystem coordSys, const Selection& refObject, const Selection& targetObject) {
-    activeObserver->setFrame(coordSys, refObject, targetObject);
-}
-
-void Simulation::setFrame(ObserverFrame::CoordinateSystem coordSys, const Selection& refObject) {
-    activeObserver->setFrame(coordSys, refObject);
-}
-
-const ObserverFramePtr& Simulation::getFrame() const {
-    return activeObserver->getFrame();
-}
-
-// Rotate the observer about its center.
-void Simulation::rotate(const Quaternionf& q) {
-    activeObserver->rotate(q);
-}
-
-// Orbit around the selection (if there is one.)  This involves changing
-// both the observer's position and orientation.
-void Simulation::orbit(const Quaternionf& q) {
-    activeObserver->orbit(selection, q);
-}
-
 // Exponential camera dolly--move toward or away from the selected object
 // at a rate dependent on the observer's distance from the object.
 void Simulation::changeOrbitDistance(float d) {
     activeObserver->changeOrbitDistance(selection, d);
-}
-
-void Simulation::setTargetSpeed(float s) {
-    activeObserver->setTargetSpeed(s);
-}
-
-float Simulation::getTargetSpeed() {
-    return activeObserver->getTargetSpeed();
 }
 
 void Simulation::gotoSelection(double gotoTime, const Vector3f& up, ObserverFrame::CoordinateSystem upFrame) {
@@ -242,14 +150,14 @@ void Simulation::selectPlanet(int index) {
                 setSelection(system->getStar());
         }
     } else {
-        StarPtr star = NULL;
+        StarConstPtr star;
         if (selection.getType() == Selection::Type_Star)
             star = selection.star();
         else if (selection.getType() == Selection::Type_Body)
             star = getSun(selection.body());
 
-        SolarSystemPtr solarSystem = NULL;
-        if (star != NULL)
+        SolarSystemPtr solarSystem;
+        if (star)
             solarSystem = universe->getSolarSystem(star);
         else
             solarSystem = closestSolarSystem;

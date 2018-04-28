@@ -14,6 +14,6 @@
 
 using ResourceHandle = uintptr_t;
 
-#define InvalidResource ((ResourceHandle)~0)
+#define InvalidResource ((ResourceHandle)~(uintptr_t)0)
 
 #endif // _RESHANDLE_H_

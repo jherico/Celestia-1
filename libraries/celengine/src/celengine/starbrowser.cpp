@@ -88,13 +88,11 @@ struct SolarSystemPredicate {
 // Find the nearest/brightest/X-est N stars in a database.  The
 // supplied predicate determines which of two stars is a better match.
 template <class Pred>
-static std::vector<StarPtr>&& findStars(const StarDatabase& stardb, Pred pred, int nStars) {
+static std::vector<StarPtr> findStars(const StarDatabase& stardb, Pred pred, size_t nStars) {
     std::vector<StarPtr> finalStars;
     if (nStars == 0)
-        return std::move(finalStars);
-
-    if (nStars > 500)
-        nStars = 500;
+        return finalStars;
+    nStars = std::min<size_t>(nStars, 500);
 
     typedef std::multiset<StarPtr, Pred> StarSet;
     StarSet firstStars(pred);
@@ -128,7 +126,7 @@ static std::vector<StarPtr>&& findStars(const StarDatabase& stardb, Pred pred, i
         finalStars.push_back(starPtr);
     }
 
-    return std::move(finalStars);
+    return finalStars;
 }
 
 const StarPtr StarBrowser::nearestStar() {
@@ -138,19 +136,19 @@ const StarPtr StarBrowser::nearestStar() {
     return findStars(*(univ->getStarCatalog()), closerPred, 1)[0];
 }
 
-std::vector<StarPtr>&& StarBrowser::listStars(uint32_t nStars) {
+std::vector<StarPtr> StarBrowser::listStars(uint32_t nStars) {
     const auto& univ = appSim->getUniverse();
     switch (predicate) {
         case BrighterStars: {
             BrighterStarPredicate brighterPred;
             brighterPred.pos = pos;
             brighterPred.ucPos = ucPos;
-            return std::move(findStars(*(univ->getStarCatalog()), brighterPred, nStars));
+            return findStars(*(univ->getStarCatalog()), brighterPred, nStars);
         } break;
 
         case BrightestStars: {
             BrightestStarPredicate brightestPred;
-            return std::move(findStars(*(univ->getStarCatalog()), brightestPred, nStars));
+            return findStars(*(univ->getStarCatalog()), brightestPred, nStars);
         } break;
 
         case StarsWithPlanets: {

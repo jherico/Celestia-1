@@ -786,3 +786,22 @@ bool CelestiaCore::referenceMarkEnabled(const string& refMark, Selection sel) co
     else
         return body->findReferenceMark(refMark) != NULL;
 }
+
+
+void CelestiaCore::render() {
+    if (!renderer) {
+        return;
+    }
+
+    renderer->render(sim->getActiveObserver(), sim->getUniverse(), sim->getFaintestVisible(), sim->getSelection());
+}
+
+void CelestiaCore::setRenderer(const RendererPtr& newRenderer) {
+    if (renderer) {
+        renderer->shutdown();
+    }
+    renderer = newRenderer;
+    if (renderer) {
+        renderer->initialize();
+    }
+}

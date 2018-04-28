@@ -21,6 +21,28 @@
 #endif
 #define dgettext(domain, text) (text)
 
+template<typename T>
+std::string concatenate(const T& begin, const T& end, const std::string& divider = "") {
+    std::string result;
+    if (begin == end) {
+        return result;
+    }
+
+    auto itr = begin;
+    bool first{ true };
+    while (itr != end) {
+        if (first) {
+            first = false;
+        } else {
+            result += divider;
+        }
+        result += *itr;
+        ++itr;
+    }
+    return result;
+}
+
+extern std::string toUpperStr(const std::string& s);
 extern int compareIgnoringCase(const std::string& s1, const std::string& s2);
 extern int compareIgnoringCase(const std::string& s1, const std::string& s2, size_t n);
 extern std::string LocaleFilename(const std::string & filename);

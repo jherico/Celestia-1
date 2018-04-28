@@ -15,27 +15,27 @@
 
 namespace vks {
 
-struct SwapChainImage {
+struct SwapchainImage {
     vk::Image image;
     vk::ImageView view;
     vk::Fence fence;
 };
 
-struct SwapChain {
+struct Swapchain {
     vk::SurfaceKHR surface;
     vk::SwapchainKHR swapChain;
     vk::PresentInfoKHR presentInfo;
     vk::PhysicalDevice physicalDevice;
     vk::Device device;
     vk::Queue queue;
-    std::vector<SwapChainImage> images;
+    std::vector<SwapchainImage> images;
     vk::Format colorFormat;
     vk::ColorSpaceKHR colorSpace;
     uint32_t imageCount{ 0 };
     uint32_t currentImage{ 0 };
     uint32_t graphicsQueueIndex{ VK_QUEUE_FAMILY_IGNORED };
 
-    SwapChain() {
+    Swapchain() {
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = &swapChain;
         presentInfo.pImageIndices = &currentImage;

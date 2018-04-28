@@ -254,6 +254,7 @@ public:
     bool initSimulation(const std::string& = "",
                         const std::vector<std::string>& extrasDirs = {},
                         const ProgressNotifierPtr& progressNotifier = nullptr);
+    void setRenderer(const RendererPtr& newRenderer);
     void start(double t);
     void getLightTravelDelay(double distance, int&, int&, float&);
     void setLightTravelDelay(double distance);
@@ -268,6 +269,7 @@ public:
     std::vector<UrlPtr>::size_type getHistoryCurrent() const { return historyCurrent; }
     void setHistoryCurrent(std::vector<Url*>::size_type curr);
     void tick();
+    void render();
 
     const SimulationPtr& getSimulation() const { return sim; }
 
@@ -324,26 +326,12 @@ public:
 
     const AlerterPtr& getAlerter() const { return alerter; }
 
-    //class CursorHandler {
-    //public:
-    //    virtual ~CursorHandler(){};
-    //    virtual void setCursorShape(CursorShape) = 0;
-    //    virtual CursorShape getCursorShape() const = 0;
-    //};
-
-    //void setCursorHandler(CursorHandler*);
-    //CursorHandler* getCursorHandler() const;
-
     void toggleReferenceMark(const std::string& refMark, Selection sel = {});
     bool referenceMarkEnabled(const std::string& refMark, Selection sel = {}) const;
 
 private:
     bool readStars(const CelestiaConfig&, const ProgressNotifierPtr&);
-    void renderOverlay();
     void fatalError(const std::string&);
-#ifdef CELX
-    bool initLuaHook(ProgressNotifier*);
-#endif  // CELX
 
 private:
     CelestiaConfigPtr config;
@@ -352,9 +340,8 @@ private:
 
     FavoritesList favorites;
     DestinationList destinations;
-
     SimulationPtr sim;
-    //Renderer* renderer;
+    RendererPtr renderer;
     int width{ 1 };
     int height{ 1 };
 
@@ -411,6 +398,7 @@ private:
 
     Selection lastSelection;
     std::string selectionNames;
+
 
 public:
     void setScriptImage(double, float, float, float, const std::string&, int);

@@ -87,15 +87,15 @@ SunDirectionArrow::SunDirectionArrow(const BodyConstPtr& _body) : ArrowReference
 
 Vector3d SunDirectionArrow::getDirection(double tdb) const {
     auto b = body;
-    StarPtr sun = NULL;
-    while (b != NULL) {
+    StarPtr sun;
+    while (b) {
         Selection center = b->getOrbitFrame(tdb)->getCenter();
         if (center.star() != NULL)
             sun = center.star();
         b = center.body();
     }
 
-    if (sun != NULL) {
+    if (sun) {
         return Selection(sun).getPosition(tdb).offsetFromKm(body->getPosition(tdb));
     } else {
         return Vector3d::Zero();

@@ -270,14 +270,10 @@ static void catalogNumberToString(uint32_t catalogNumber, char* buf, uint32_t bu
 // required as it's all wrapped in the string class.)
 string StarDatabase::getStarName(const Star& star, bool i18n) const {
     uint32_t catalogNumber = star.getCatalogNumber();
-
     if (namesDB != NULL) {
-        StarNameDatabase::NumberIndex::const_iterator iter = namesDB->getFirstNameIter(catalogNumber);
-        if (iter != namesDB->getFinalNameIter() && iter->first == catalogNumber) {
-            if (i18n && iter->second != _(iter->second.c_str()))
-                return _(iter->second.c_str());
-            else
-                return iter->second;
+        const auto& names = namesDB->getNamesByCatalogNumber(catalogNumber);
+        if (!names.empty()) {
+            return i18n ? names.front() : _(names.front());
         }
     }
 
@@ -299,47 +295,21 @@ string StarDatabase::getStarName(const Star& star, bool i18n) const {
 void StarDatabase::getStarName(const Star& star, char* nameBuffer, uint32_t bufferSize, bool i18n) const {
     assert(bufferSize != 0);
 
-    uint32_t catalogNumber = star.getCatalogNumber();
-
-    if (namesDB != NULL) {
-        StarNameDatabase::NumberIndex::const_iterator iter = namesDB->getFirstNameIter(catalogNumber);
-        if (iter != namesDB->getFinalNameIter() && iter->first == catalogNumber) {
-            if (i18n && iter->second != _(iter->second.c_str()))
-                strncpy(nameBuffer, _(iter->second.c_str()), bufferSize);
-            else
-                strncpy(nameBuffer, iter->second.c_str(), bufferSize);
-
-            nameBuffer[bufferSize - 1] = '\0';
-            return;
-        }
-    }
-
-    catalogNumberToString(catalogNumber, nameBuffer, bufferSize);
+    auto name = getStarName(star, i18n);
+    strncpy(nameBuffer, name.c_str(), bufferSize);
 }
 
 string StarDatabase::getStarNameList(const Star& star, const uint32_t maxNames) const {
-    string starNames;
+    std::list<string> starNames;
     char numString[32];
 
     uint32_t catalogNumber = star.getCatalogNumber();
-
-    StarNameDatabase::NumberIndex::const_iterator iter = namesDB->getFirstNameIter(catalogNumber);
-
-    uint32_t count = 0;
-    while (iter != namesDB->getFinalNameIter() && iter->first == catalogNumber && count < maxNames) {
-        if (count != 0)
-            starNames += " / ";
-
-        starNames += ReplaceGreekLetterAbbr(iter->second.c_str());
-        ++iter;
-        ++count;
-    }
+    const auto& names = namesDB->getNamesByCatalogNumber(catalogNumber);
+    std::copy(names.begin(), names.end(), std::back_inserter(starNames));
 
     uint32_t hip = catalogNumber;
-    if (hip != Star::InvalidCatalogNumber && hip != 0 && count < maxNames) {
+    if (hip != Star::InvalidCatalogNumber && hip != 0 && starNames.size() < maxNames) {
         if (hip <= Star::MaxTychoCatalogNumber) {
-            if (count != 0)
-                starNames += " / ";
             if (hip >= 1000000) {
                 uint32_t h = hip;
                 uint32_t tyc3 = h / 1000000000;
@@ -349,33 +319,27 @@ string StarDatabase::getStarNameList(const Star& star, const uint32_t maxNames) 
                 uint32_t tyc1 = h;
 
                 sprintf(numString, "TYC %u-%u-%u", tyc1, tyc2, tyc3);
-                starNames += numString;
+                starNames.push_back(numString);
             } else {
                 sprintf(numString, "HIP %u", hip);
-                starNames += numString;
+                starNames.push_back(numString);
             }
-
-            ++count;
         }
     }
 
     uint32_t hd = crossIndex(StarDatabase::HenryDraper, hip);
-    if (count < maxNames && hd != Star::InvalidCatalogNumber) {
-        if (count != 0)
-            starNames += " / ";
+    if (starNames.size() < maxNames && hd != Star::InvalidCatalogNumber) {
         sprintf(numString, "HD %u", hd);
-        starNames += numString;
+        starNames.push_back(numString);
     }
 
     uint32_t sao = crossIndex(StarDatabase::SAO, hip);
-    if (count < maxNames && sao != Star::InvalidCatalogNumber) {
-        if (count != 0)
-            starNames += " / ";
+    if (starNames.size() < maxNames && sao != Star::InvalidCatalogNumber) {
         sprintf(numString, "SAO %u", sao);
-        starNames += numString;
+        starNames.push_back(numString);
     }
 
-    return starNames;
+    return concatenate(starNames.begin(), starNames.end(), " / ");
 }
 
 void StarDatabase::findVisibleStars(StarHandler& starHandler,

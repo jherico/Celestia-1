@@ -4,10 +4,8 @@
 
 #include <QtGui/QGuiApplication>
 
-namespace vks {
-struct Context;
-}
 class CelestiaCore;
+class Renderer;
 
 class CelestiaVrApplication : public QGuiApplication {
     Q_OBJECT
@@ -20,7 +18,7 @@ private slots:
     void onAboutToQuit();
 
 private:
-    std::shared_ptr<vks::Context> _vkContext;
+    bool _aboutToQuit{ false };
     std::shared_ptr<CelestiaCore> _celestiaCore;
     QWindow* _window{ nullptr };
     QTimer* _timer{ nullptr };
