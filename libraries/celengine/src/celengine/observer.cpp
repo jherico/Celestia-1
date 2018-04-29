@@ -455,6 +455,8 @@ void Observer::reverseOrientation() {
     reverseFlag = !reverseFlag;
 }
 
+#if 0
+
 struct TravelExpFunc : public unary_function<double, double> {
     double dist, s;
 
@@ -465,6 +467,13 @@ struct TravelExpFunc : public unary_function<double, double> {
         return exp(x * s) * (x * (1 - s) + 1) - 1 - dist;
     }
 };
+#endif
+
+std::function<double(double)> TravelExpFunc(double dist, double s) {
+    return [=](double x)->double {
+        return exp(x * s) * (x * (1 - s) + 1) - 1 - dist;
+    };
+}
 
 void Observer::computeGotoParameters(const Selection& destination,
                                      JourneyParams& jparams,
@@ -1128,14 +1137,6 @@ void Observer::chase(const Selection& selection) {
     if (selection.body() != NULL || selection.star() != NULL) {
         setFrame(ObserverFrame::Chase, selection);
     }
-}
-
-float Observer::getFOV() const {
-    return fov;
-}
-
-void Observer::setFOV(float _fov) {
-    fov = _fov;
 }
 
 Vector3f Observer::getPickRay(float x, float y) const {

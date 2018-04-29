@@ -29,15 +29,6 @@ public:
 
     operator bool() const { return buffer.operator bool(); }
 
-    /** 
-        * Attach the allocated memory block to the buffer
-        * 
-        * @param offset (Optional) Byte offset (from the beginning) for the memory region to bind
-        * 
-        * @return VkResult of the bindBufferMemory call
-        */
-    void bind(vk::DeviceSize offset = 0) { return device.bindBufferMemory(buffer, memory, offset); }
-
     /**
         * Setup the default descriptor for this buffer
         *

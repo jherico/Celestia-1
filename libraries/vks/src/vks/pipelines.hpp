@@ -1,7 +1,6 @@
 #pragma once
 
 #include "context.hpp"
-#include "model.hpp"
 #include "shaders.hpp"
 
 namespace vks { namespace pipelines {
@@ -65,18 +64,6 @@ struct PipelineVertexInputStateCreateInfo : public vk::PipelineVertexInputStateC
     std::vector<vk::VertexInputBindingDescription> bindingDescriptions;
     std::vector<vk::VertexInputAttributeDescription> attributeDescriptions;
 
-    void appendVertexLayout(const vks::model::VertexLayout& vertexLayout, uint32_t binding = 0, vk::VertexInputRate rate = vk::VertexInputRate::eVertex) {
-        bindingDescriptions.emplace_back(binding, vertexLayout.stride(), rate);
-        auto componentsSize = vertexLayout.components.size();
-        attributeDescriptions.reserve(attributeDescriptions.size() + componentsSize);
-        auto attributeIndexOffset = (uint32_t)attributeDescriptions.size();
-        for (uint32_t i = 0; i < componentsSize; ++i) {
-            const auto& component = vertexLayout.components[i];
-            const auto format = vertexLayout.componentFormat(component);
-            const auto offset = vertexLayout.offset(i);
-            attributeDescriptions.emplace_back(attributeIndexOffset + i, binding, format, offset);
-        }
-    }
 
     void update() {
         vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
@@ -132,16 +119,14 @@ private:
     }
 
 public:
-    GraphicsPipelineBuilder(const vk::Device& device, const vk::PipelineLayout layout, const vk::RenderPass& renderPass)
+    GraphicsPipelineBuilder(const vk::Device& device, const vk::PipelineCache& cache = nullptr)
         : device(device) {
         pipelineCreateInfo.layout = layout;
         pipelineCreateInfo.renderPass = renderPass;
         init();
     }
 
-    GraphicsPipelineBuilder(const GraphicsPipelineBuilder& other)
-        : GraphicsPipelineBuilder(other.device, other.layout, other.renderPass) {}
-
+    GraphicsPipelineBuilder(const GraphicsPipelineBuilder& other) = delete;
     GraphicsPipelineBuilder& operator=(const GraphicsPipelineBuilder& other) = delete;
 
     ~GraphicsPipelineBuilder() { destroyShaderModules(); }

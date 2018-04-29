@@ -1,8 +1,11 @@
 #include "VulkanRenderer.h"
 
-#include <QtGui/QWindow>
-#include <QtGui/QVulkanInstance>
+#include <mutex>
+
+#include <QtCore/QDir>
 #include <QtCore/QTimer>
+#include <QtCore/QFileInfo>
+#include <QtGui/QWindow>
 
 #include <celengine/skygrid.h>
 
@@ -10,8 +13,10 @@
 #include <Windows.h>
 #endif
 
+#include <vks/pipelines.hpp>
 #include "CloseEventFilter.h"
 
+#pragma optimize("", off)
 using namespace Eigen;
 
 static Vector3d toStandardCoords(const Vector3d& v) {
@@ -24,18 +29,14 @@ void VulkanRenderer::onWindowResized() {
 }
 
 void VulkanRenderer::onResizeTimer() {
+    waitIdle();
     _resizing = false;
     for (const auto& framebuffer : _framebuffers) {
         _device.destroy(framebuffer);
     }
     _framebuffers.clear();
-    _device.freeCommandBuffers(_context.getCommandPool(), _commandBuffers);
-    _commandBuffers.clear();
-
     _swapchain.create(_extent, true);
-    createRenderPass();
     createFramebuffers();
-    createCommandBuffers();
 }
 
 void VulkanRenderer::onWindowClosing() {
@@ -46,6 +47,18 @@ void VulkanRenderer::onWindowClosing() {
 void VulkanRenderer::waitIdle() {
     _queue.waitIdle();
     _device.waitIdle();
+}
+
+// FIXME
+static const std::string& getAssetPath() {
+    static std::once_flag once;
+    static std::string ASSET_PATH;
+    std::call_once(once, [&] {
+        auto dir = QFileInfo{ __FILE__ }.dir();
+        dir.cd("../../resources");
+        ASSET_PATH = QDir::cleanPath(dir.absolutePath()).toStdString() + "/";
+    });
+    return ASSET_PATH;
 }
 
 void VulkanRenderer::initialize() {
@@ -81,7 +94,68 @@ void VulkanRenderer::initialize() {
     _swapchain.create(_extent, true);
     createRenderPass();
     createFramebuffers();
-    createCommandBuffers();
+
+    // Camera UBO
+    { _buffers.cameraUbo = _context.createUniformBuffer(_camera); }
+
+    // skygrid setup
+    {
+        // Vertices
+        {
+            static const uint32_t MERIDIANS = 24;
+            static const uint32_t GREAT_CIRCLE_SEGMENTS = 128;
+            static const float phiInterval = TAUf / MERIDIANS;
+            static const float thetaInterval = HALF_TAUf / GREAT_CIRCLE_SEGMENTS;
+
+            std::vector<glm::vec3> vertices;
+            vertices.reserve(MERIDIANS * GREAT_CIRCLE_SEGMENTS);
+            std::vector<uint32_t> indices;
+            indices.reserve(MERIDIANS * GREAT_CIRCLE_SEGMENTS);
+            for (uint32_t i = 0; i < 24; ++i) {
+                float phi = (phiInterval * i) - HALF_TAUf;
+                float sinPhi = sin(phi);
+                float cosPhi = cos(phi);
+                for (uint32_t j = 0; j < GREAT_CIRCLE_SEGMENTS; ++j) {
+                    float theta = (j * thetaInterval) - QUARTER_TAUf;
+                    float sinTheta = sin(theta);
+                    float cosTheta = cos(theta);
+                    glm::vec3 vertex{ sinTheta * cosPhi, sinTheta * sinPhi, cosTheta };
+                    vertex *= 0.5f;
+                    vertices.push_back(vertex);
+                    indices.push_back(vertices.size());
+                }
+                indices.push_back(UINT32_MAX);
+            }
+
+            _skyGrids.vertices = _context.stageToDeviceBuffer<glm::vec3>(vk::BufferUsageFlagBits::eVertexBuffer, vertices);
+            _skyGrids.indices = _context.stageToDeviceBuffer<uint32_t>(vk::BufferUsageFlagBits::eIndexBuffer, indices);
+        }
+
+        // Pipeline layout
+        {
+            vk::PushConstantRange pushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(SkyGrids::PushContstants) };
+            _skyGrids.pipelineLayout = _device.createPipelineLayout({ {}, 0, nullptr, 1, &pushConstantRange });
+        }
+
+        {
+            vks::pipelines::GraphicsPipelineBuilder builder{ _device, _context.pipelineCache };
+            builder.layout = _skyGrids.pipelineLayout;
+            builder.renderPass = _renderPass;
+            builder.inputAssemblyState.primitiveRestartEnable = VK_TRUE;
+            builder.inputAssemblyState.topology = vk::PrimitiveTopology::eLineStrip;
+            builder.vertexInputState.bindingDescriptions = { { 0, sizeof(glm::vec3), vk::VertexInputRate::eVertex } };
+            builder.vertexInputState.attributeDescriptions = { { 0, 0, vk::Format::eR32G32B32Sfloat } };
+            builder.dynamicState.dynamicStateEnables = {
+                vk::DynamicState::eViewport,
+                vk::DynamicState::eScissor,
+                vk::DynamicState::eLineWidth,
+            };
+            builder.loadShader(getAssetPath() + "shaders/skygrid.vert.spv", vk::ShaderStageFlagBits::eVertex);
+            builder.loadShader(getAssetPath() + "shaders/skygrid.frag.spv", vk::ShaderStageFlagBits::eFragment);
+            builder.create(_context.pipelineCache);
+        }
+    }
+
     _ready = true;
 }
 
@@ -110,24 +184,17 @@ void VulkanRenderer::createRenderPass() {
     subpass.pColorAttachments = attachmentReferences.data();
     subpasses.push_back(subpass);
 
-    vk::SubpassDependency dependency;
-    dependency.srcSubpass = 0;
-    dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-    dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-
-    dependency.dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead;
-    dependency.dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-    subpassDependencies.push_back(dependency);
-
-    vk::RenderPassCreateInfo renderPassInfo;
-    renderPassInfo.attachmentCount = (uint32_t)attachments.size();
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = (uint32_t)subpasses.size();
-    renderPassInfo.pSubpasses = subpasses.data();
-    renderPassInfo.dependencyCount = (uint32_t)subpassDependencies.size();
-    renderPassInfo.pDependencies = subpassDependencies.data();
-    _renderPass = _device.createRenderPass(renderPassInfo);
+    using vAF = vk::AccessFlagBits;
+    using vPSF = vk::PipelineStageFlagBits;
+    subpassDependencies.push_back({ 0u, VK_SUBPASS_EXTERNAL, vPSF::eColorAttachmentOutput, vPSF::eBottomOfPipe,
+                                    vAF::eColorAttachmentWrite, vAF::eColorAttachmentRead, vk::DependencyFlagBits::eByRegion });
+    _renderPass = _device.createRenderPass({ {},
+                                             (uint32_t)attachments.size(),
+                                             attachments.data(),
+                                             (uint32_t)subpasses.size(),
+                                             subpasses.data(),
+                                             (uint32_t)subpassDependencies.size(),
+                                             subpassDependencies.data() });
 }
 
 void VulkanRenderer::createFramebuffers() {
@@ -144,34 +211,6 @@ void VulkanRenderer::createFramebuffers() {
     _framebuffers = _swapchain.createFramebuffers(framebufferCreateInfo);
 }
 
-void VulkanRenderer::createCommandBuffers() {
-    // Allocate command buffers, 1 for each swap chain image
-    if (_commandBuffers.empty()) {
-        _commandBuffers = _context.allocateCommandBuffers(_swapchain.imageCount);
-    }
-
-    static const std::vector<vk::ClearColorValue> CLEAR_COLORS{
-        vks::util::clearColor({ 1, 0, 0, 0 }), vks::util::clearColor({ 0, 1, 0, 0 }), vks::util::clearColor({ 0, 0, 1, 0 }),
-        vks::util::clearColor({ 0, 1, 1, 0 }), vks::util::clearColor({ 1, 0, 1, 0 }), vks::util::clearColor({ 1, 1, 0, 0 }),
-        vks::util::clearColor({ 1, 1, 1, 0 }),
-    };
-
-    vk::ClearValue clearValue;
-    vk::RenderPassBeginInfo renderPassBeginInfo{ _renderPass, {}, { {}, _extent }, 1, &clearValue };
-
-    for (size_t i = 0; i < _swapchain.imageCount; ++i) {
-        const auto& commandBuffer = _commandBuffers[i];
-        clearValue.color = CLEAR_COLORS[i % CLEAR_COLORS.size()];
-        // Set target frame buffer
-        renderPassBeginInfo.framebuffer = _framebuffers[i];
-        commandBuffer.reset(vk::CommandBufferResetFlagBits::eReleaseResources);
-        commandBuffer.begin(vk::CommandBufferBeginInfo{});
-        commandBuffer.beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
-        commandBuffer.endRenderPass();
-        commandBuffer.end();
-    }
-}
-
 void VulkanRenderer::shutdown() {
     if (_context.instance) {
         _ready = false;
@@ -180,8 +219,9 @@ void VulkanRenderer::shutdown() {
             _device.destroy(framebuffer);
         }
         _framebuffers.clear();
-        _device.freeCommandBuffers(_context.getCommandPool(), _commandBuffers);
-        _commandBuffers.clear();
+        if (_frame.commandBuffer) {
+            _device.freeCommandBuffers(_context.getCommandPool(), _frame.commandBuffer);
+        }
         _device.destroySemaphore(_semaphores.acquireComplete);
         _device.destroySemaphore(_semaphores.renderComplete);
         _swapchain.destroy();
@@ -198,9 +238,20 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
     }
     const auto& observer = *observerPtr;
     const auto& universe = *universePtr;
-    draw(observer, universe, faintestVisible, sel);
+    preRender(observer, universe, faintestVisible, sel);
 
     uint32_t currentBuffer = _swapchain.acquireNextImage(_semaphores.acquireComplete).value;
+
+    if (_frame.commandBuffer) {
+        _context.trash(_frame.commandBuffer);
+    }
+
+    static const vk::ClearValue CLEAR_COLOR{ vks::util::clearColor({ 0, 0, 0, 1 }) };
+    _frame.commandBuffer = _context.allocateCommandBuffers(1)[0];
+    _frame.framebuffer = _framebuffers[currentBuffer];
+    _frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+    _frame.commandBuffer.beginRenderPass({ _renderPass, _frame.framebuffer, { {}, _extent }, 1, &CLEAR_COLOR },
+                                         vk::SubpassContents::eInline);
 
     // Render sky grids first--these will always be in the background
     renderSkyGrids(observer);
@@ -216,7 +267,7 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
     }
 
     // Render asterisms
-    if ((renderFlags & ShowDiagrams) != 0 && universe.getAsterisms() != NULL) {
+    if ((renderFlags & ShowDiagrams) != 0 && !universe.getAsterisms().empty()) {
         /* We'll linearly fade the lines as a function of the observer's distance to the origin of coordinates: */
         //float opacity = 1.0f;
         //float dist = observerPosLY.norm() * 1.6e4f;
@@ -224,7 +275,7 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
         //    opacity = clamp((MaxAsterismLinesConstDist - dist) / (MaxAsterismLinesDist - MaxAsterismLinesConstDist) + 1);
         //}
 
-        for (const auto& ast : *universe.getAsterisms()) {
+        for (const auto& ast : universe.getAsterisms()) {
             if (ast->getActive()) {
                 if (ast->isColorOverridden()) {
                 } else {
@@ -259,11 +310,16 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
     //    labelConstellations(*universe.getAsterisms(), observer);
     //    renderBackgroundAnnotations(FontLarge);
     //}
+    _frame.commandBuffer.endRenderPass();
+    _frame.commandBuffer.end();
 
-    _context.submit(_commandBuffers[currentBuffer], { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe },
-                    _semaphores.renderComplete, _swapchain.getSubmitFence());
-
+    auto fence = _device.createFence({});
+    _context.submit(_frame.commandBuffer, { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe },
+                    _semaphores.renderComplete, fence);
     _swapchain.queuePresent(_semaphores.renderComplete);
+    _context.emptyDumpster(fence);
+    _device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+    _context.recycle();
 }
 
 void VulkanRenderer::renderSkyGrids(const Observer& observer) {
@@ -342,6 +398,12 @@ void VulkanRenderer::renderSkyGrids(const Observer& observer) {
         //}
         //glEnd();
     }
+}
+
+void VulkanRenderer::renderDeepSkyObjects(const Universe& universe, const Observer& observer, const float faintestMagNight) {
+}
+
+void VulkanRenderer::renderStars(const StarDatabase& starDB, float faintestMagNight, const Observer& observer) {
 }
 
 #if 0

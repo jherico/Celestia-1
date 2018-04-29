@@ -13,7 +13,15 @@
 #include <cmath>
 #include <cstdlib>
 
-#define PI 3.14159265358979323846
+#define TAU 6.28318530717958647692
+#define HALF_TAU 3.14159265358979323846
+#define QUARTER_TAU 1.57079632679489661923
+#define PI HALF_TAU
+
+#define TAUf 6.28318530717958647692f
+#define HALF_TAUf 3.14159265358979323846f
+#define QUARTER_TAUf 1.57079632679489661923f
+#define PIf HALF_TAUf
 
 // TODO: All of the functions in the 'Math' class should be
 // moved to the celmath namespace.

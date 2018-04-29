@@ -161,6 +161,7 @@ EllipticalOrbit::EllipticalOrbit(double _pericenterDistance,
     orbitPlaneRotation = (ZRotation(_ascendingNode) * XRotation(_inclination) * ZRotation(_argOfPeriapsis)).toRotationMatrix();
 }
 
+#if 0
 // Standard iteration for solving Kepler's Equation
 struct SolveKeplerFunc1 : public unary_function<double, double> {
     double ecc;
@@ -218,6 +219,7 @@ struct SolveKeplerLaguerreConwayHyp : public unary_function<double, double> {
         return x;
     }
 };
+#endif
 
 typedef pair<double, double> Solution;
 
@@ -228,38 +230,60 @@ Vector3d Orbit::velocityAtTime(double tdb) const {
 }
 
 double EllipticalOrbit::eccentricAnomaly(double M) const {
-    if (eccentricity == 0.0) {
-        // Circular orbit
+    if (eccentricity == 0.0 || eccentricity == 1.0) {
+        // Circular orbit or
+        // Nearly parabolic orbit; very common for comets
+        // TODO: handle this
         return M;
-    } else if (eccentricity < 0.2) {
+    } 
+    
+    std::function<double(double)> f;
+    double E = M;
+    int maxIterations = 5;
+
+    if (eccentricity < 0.2) {
         // Low eccentricity, so use the standard iteration technique
-        Solution sol = solve_iteration_fixed(SolveKeplerFunc1(eccentricity, M), M, 5);
-        return sol.first;
+        f = [&](double x)->double { return M + eccentricity * sin(x); };
+        maxIterations = 5;
     } else if (eccentricity < 0.9) {
         // Higher eccentricity elliptical orbit; use a more complex but
         // much faster converging iteration.
-        Solution sol = solve_iteration_fixed(SolveKeplerFunc2(eccentricity, M), M, 6);
-        // Debugging
-        // printf("ecc: %f, error: %f mas\n",
-        //        eccentricity, radToDeg(sol.second) * 3600000);
-        return sol.first;
+        f = [&](double x)->double {
+            return x + (M + eccentricity * sin(x) - x) / (1 - eccentricity * cos(x));
+        };
+        maxIterations = 6;
     } else if (eccentricity < 1.0) {
         // Extremely stable Laguerre-Conway method for solving Kepler's
         // equation.  Only use this for high-eccentricity orbits, as it
         // requires more calcuation.
-        double E = M + 0.85 * eccentricity * sign(sin(M));
-        Solution sol = solve_iteration_fixed(SolveKeplerLaguerreConway(eccentricity, M), E, 8);
-        return sol.first;
-    } else if (eccentricity == 1.0) {
-        // Nearly parabolic orbit; very common for comets
-        // TODO: handle this
-        return M;
+        E = M + 0.85 * eccentricity * sign(sin(M));
+        f = [&](double x)->double {
+            double s = eccentricity * sin(x);
+            double c = eccentricity * cos(x);
+            double f = x - s - M;
+            double f1 = 1 - c;
+            double f2 = s;
+            x += -5 * f / (f1 + sign(f1) * sqrt(abs(16 * f1 * f1 - 20 * f * f2)));
+            return x;
+        };
+        maxIterations = 8;
     } else {
         // Laguerre-Conway method for hyperbolic (ecc > 1) orbits.
-        double E = log(2 * M / eccentricity + 1.85);
-        Solution sol = solve_iteration_fixed(SolveKeplerLaguerreConwayHyp(eccentricity, M), E, 30);
-        return sol.first;
+        E = log(2 * M / eccentricity + 1.85);
+        f = [&](double x)->double {
+            double s = eccentricity * sinh(x);
+            double c = eccentricity * cosh(x);
+            double f = s - x - M;
+            double f1 = c - 1;
+            double f2 = s;
+            x += -5 * f / (f1 + sign(f1) * sqrt(abs(16 * f1 * f1 - 20 * f * f2)));
+            return x;
+        };
+        maxIterations = 30;
     }
+    Solution sol = solve_iteration_fixed(f, E, maxIterations);
+    return sol.first;
+
 }
 
 // Compute the position at the specified eccentric

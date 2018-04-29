@@ -121,8 +121,11 @@ public:
     Eigen::Vector3d getAngularVelocity() const;
     void setAngularVelocity(const Eigen::Vector3d&);
 
+
+    /*
     float getFOV() const;
     void setFOV(float);
+    */
 
     void update(double dt, double timeScale);
 

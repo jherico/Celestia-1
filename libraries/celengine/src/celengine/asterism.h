@@ -32,8 +32,8 @@ public:
     using ChainPointer = std::shared_ptr<Chain>;
 
     std::string getName(bool i18n = false) const;
-    uint32_t getChainCount() const;
-    const Chain& getChain(uint32_t) const;
+    size_t getChainCount() const;
+    const Chain& getChain(size_t) const;
 
     bool getActive() const;
     void setActive(bool _active);

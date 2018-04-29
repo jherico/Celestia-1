@@ -242,6 +242,14 @@ public:
 
         // Get the graphics queue
         queue = device.getQueue(queueIndices.graphics, 0);
+
+        VmaAllocatorCreateInfo allocatorCreateInfo{};
+        allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
+        allocatorCreateInfo.device = device;
+        allocatorCreateInfo.physicalDevice = physicalDevice;
+        allocatorCreateInfo.frameInUseCount = 1;
+        auto vkresult = vmaCreateAllocator(&allocatorCreateInfo, &allocator);
+        vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
     }
 
     void destroy() {
@@ -330,6 +338,11 @@ public:
 
     void trashPipeline(vk::Pipeline& pipeline) const {
         trash<vk::Pipeline>(pipeline, [this](vk::Pipeline pipeline) { device.destroyPipeline(pipeline); });
+    }
+
+
+    void trashCommandBuffers(std::vector<vk::CommandBuffer>& cmdBuffers) const {
+        trashCommandBuffers(getCommandPool(), cmdBuffers);
     }
 
     void trashCommandBuffers(const vk::CommandPool& commandPool, std::vector<vk::CommandBuffer>& cmdBuffers) const {
@@ -502,6 +515,7 @@ public:
     vk::PipelineCache pipelineCache;
     // Helper for accessing functionality not available in the statically linked Vulkan library
     vk::DispatchLoaderDynamic dynamicDispatch;
+    VmaAllocator allocator{ nullptr };
 
     struct QueueIndices {
         uint32_t graphics{ VK_QUEUE_FAMILY_IGNORED };
@@ -573,15 +587,14 @@ public:
                       const vk::MemoryPropertyFlags& memoryPropertyFlags = vk::MemoryPropertyFlagBits::eDeviceLocal) const {
         Image result;
         result.device = device;
-        result.image = device.createImage(imageCreateInfo);
+        result.allocator = allocator;
         result.format = imageCreateInfo.format;
         result.extent = imageCreateInfo.extent;
-        vk::MemoryRequirements memReqs = device.getImageMemoryRequirements(result.image);
-        vk::MemoryAllocateInfo memAllocInfo;
-        memAllocInfo.allocationSize = result.allocSize = memReqs.size;
-        memAllocInfo.memoryTypeIndex = getMemoryType(memReqs.memoryTypeBits, memoryPropertyFlags);
-        result.memory = device.allocateMemory(memAllocInfo);
-        device.bindImageMemory(result.image, result.memory, 0);
+
+        VmaAllocationCreateInfo allocationCreateInfo{};
+        allocationCreateInfo.requiredFlags = memoryPropertyFlags.operator VkMemoryPropertyFlags();
+        auto vkresult = vmaCreateImage(allocator, reinterpret_cast<const VkImageCreateInfo*>(&imageCreateInfo), &allocationCreateInfo, reinterpret_cast<VkImage*>(&result.image), &result.allocation, &result.info);
+        vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
         return result;
     }
 
@@ -650,24 +663,20 @@ public:
     }
 
     Buffer createBuffer(const vk::BufferUsageFlags& usageFlags, const vk::MemoryPropertyFlags& memoryPropertyFlags, vk::DeviceSize size) const {
-        Buffer result;
-        result.device = device;
-        result.size = size;
-        result.descriptor.range = VK_WHOLE_SIZE;
-        result.descriptor.offset = 0;
-
         vk::BufferCreateInfo bufferCreateInfo;
         bufferCreateInfo.usage = usageFlags;
         bufferCreateInfo.size = size;
 
-        result.descriptor.buffer = result.buffer = device.createBuffer(bufferCreateInfo);
+        VmaAllocationCreateInfo allocationCreateInfo{};
+        allocationCreateInfo.requiredFlags = memoryPropertyFlags.operator VkMemoryPropertyFlags();
 
-        vk::MemoryRequirements memReqs = device.getBufferMemoryRequirements(result.buffer);
-        vk::MemoryAllocateInfo memAlloc;
-        result.allocSize = memAlloc.allocationSize = memReqs.size;
-        memAlloc.memoryTypeIndex = getMemoryType(memReqs.memoryTypeBits, memoryPropertyFlags);
-        result.memory = device.allocateMemory(memAlloc);
-        device.bindBufferMemory(result.buffer, result.memory, 0);
+        Buffer result;
+        result.allocator = allocator;
+        result.device = device;
+        result.size = size;
+        auto vkresult = vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferCreateInfo), &allocationCreateInfo, reinterpret_cast<VkBuffer*>(&result.buffer), &result.allocation, &result.info);
+        result.descriptor.buffer = result.buffer;
+        vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
         return result;
     }
 
@@ -675,7 +684,7 @@ public:
         auto result =
             createBuffer(vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, size);
         if (data != nullptr) {
-            copyToMemory(result.memory, data, size);
+            copyToMemory(result.allocation, data, size);
         }
         return result;
     }
@@ -713,6 +722,24 @@ public:
         result.map();
         result.copy(data);
         return result;
+    }
+
+    void copyToMemory(const VmaAllocation& memory, const void* data, vk::DeviceSize size, vk::DeviceSize offset = 0) const {
+        void* mapped;
+        auto vkresult = vmaMapMemory(allocator, memory, &mapped); 
+        vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
+        memcpy(mapped, data, size);
+        vmaUnmapMemory(allocator, memory);
+    }
+
+    template <typename T>
+    void copyToMemory(const VmaAllocation& memory, const T& data, size_t offset = 0) const {
+        copyToMemory(memory, &data, sizeof(T), offset);
+    }
+
+    template <typename T>
+    void copyToMemory(const VmaAllocation& memory, const std::vector<T>& data, size_t offset = 0) const {
+        copyToMemory(memory, data.data(), data.size() * sizeof(T), offset);
     }
 
     void copyToMemory(const vk::DeviceMemory& memory, const void* data, vk::DeviceSize size, vk::DeviceSize offset = 0) const {

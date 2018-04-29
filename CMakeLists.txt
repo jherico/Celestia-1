@@ -46,6 +46,27 @@ else()
     link_libraries(${XCB_LIBRARIES})
 endif()
 
+
+
+set(SHADER_DIR "${PROJECT_SOURCE_DIR}/resources/shaders")
+file(GLOB_RECURSE SHADERS
+    ${SHADER_DIR}/*.vert
+    ${SHADER_DIR}/*.frag
+    ${SHADER_DIR}/*.comp
+    ${SHADER_DIR}/*.tesc
+    ${SHADER_DIR}/*.tese
+    ${SHADER_DIR}/*.geom
+)
+foreach(SHADER ${SHADERS})
+    compile_spirv_shader(${SHADER})
+    list(APPEND COMPILED_SHADERS ${COMPILE_SPIRV_SHADER_RETURN})
+    source_group("compiled" FILES ${COMPILE_SPIRV_SHADER_RETURN})
+endforeach()
+add_custom_target(shaders SOURCES ${SHADERS} ${COMPILED_SHADERS})
+set_target_properties(shaders PROPERTIES FOLDER "common")
+
+
+
 add_definitions(-DUSE_SPICE=1)
 add_subdirectory(libraries)
 add_subdirectory(app)

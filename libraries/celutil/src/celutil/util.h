@@ -47,24 +47,22 @@ extern int compareIgnoringCase(const std::string& s1, const std::string& s2);
 extern int compareIgnoringCase(const std::string& s1, const std::string& s2, size_t n);
 extern std::string LocaleFilename(const std::string & filename);
 
-class CompareIgnoringCasePredicate : public std::binary_function<std::string, std::string, bool>
-{
+class CompareIgnoringCasePredicate {
  public:
     bool operator()(const std::string&, const std::string&) const;
 };
 
-template <class T> struct printlineFunc : public std::unary_function<T, void>
+template <class T> struct printlineFunc 
 {
     printlineFunc(std::ostream& o) : out(o) {};
     void operator() (T x) { out << x << '\n'; };
     std::ostream& out;
 };
 
-template <class T> struct deleteFunc : public std::unary_function<T, void>
+template <class T> struct deleteFunc 
 {
     deleteFunc() {};
     void operator() (T x) { delete x; };
-    int dummy;
 };
 
 #endif // _CELUTIL_UTIL_H_

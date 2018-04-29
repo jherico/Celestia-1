@@ -11,7 +11,7 @@
 
 // Solve a function using the bisection method.  Returns a pair
 // with the solution as the first element and the error as the second.
-template <class T, class F>
+template <class T, typename F>
 std::pair<T, T> solve_bisection(F f, T lower, T upper, T err, int maxIter = 100) {
     T x = 0.0;
 
@@ -32,7 +32,7 @@ std::pair<T, T> solve_bisection(F f, T lower, T upper, T err, int maxIter = 100)
 
 // Solve using iteration; terminate when error is below err or the maximum
 // number of iterations is reached.
-template <class T, class F>
+template <class T, typename F>
 std::pair<T, T> solve_iteration(F f, T x0, T err, int maxIter = 100) {
     T x = 0;
     T x2 = x0;
@@ -48,7 +48,7 @@ std::pair<T, T> solve_iteration(F f, T x0, T err, int maxIter = 100) {
 }
 
 // Solve using iteration method and a fixed number of steps.
-template <class T, class F>
+template <class T, typename F>
 std::pair<T, T> solve_iteration_fixed(F f, T x0, int maxIter) {
     T x = 0;
     T x2 = x0;

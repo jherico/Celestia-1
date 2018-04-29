@@ -494,7 +494,7 @@ bool CelestiaCore::initSimulation(const string& configFileName,
             warning(_("Error opening asterisms file."));
         } else {
             auto asterisms = ReadAsterismList(asterismsFile, *universe->getStarCatalog());
-            universe->setAsterisms(asterisms);
+            universe->setAsterisms(*asterisms);
         }
     }
 

@@ -68,7 +68,6 @@ void CelestiaState::captureState(const CelestiaCorePtr& appCore) {
     trackedBodyName = getEncodedObjectName(tracked, appCore);
     Selection selected = sim->getSelection();
     selectedBodyName = getEncodedObjectName(selected, appCore);
-    fieldOfView = radToDeg(sim->getActiveObserver()->getFOV());
     timeScale = (float)sim->getTimeScale();
     pauseState = sim->getPauseState();
     lightTimeDelay = appCore->getLightDelayActive();
@@ -336,13 +335,10 @@ Url::Url(const CelestiaCorePtr& core, UrlType type) {
             selectedStr = getEncodedObjectName(selected);
             if (selectedStr != "")
                 urlStr += "&select=" + selectedStr;
-
-            fieldOfView = radToDeg(sim->getActiveObserver()->getFOV());
             timeScale = (float)sim->getTimeScale();
             pauseState = sim->getPauseState();
             lightTimeDelay = appCore->getLightDelayActive();
-            sprintf(buff, "&fov=%f&ts=%f&ltd=%c&p=%c&", fieldOfView, timeScale, lightTimeDelay ? '1' : '0',
-                    pauseState ? '1' : '0');
+            sprintf(buff, "&ts=%f&ltd=%c&p=%c&", timeScale, lightTimeDelay ? '1' : '0', pauseState ? '1' : '0');
             urlStr += buff;
         case Settings:  // Intentional Fall-Through
             //renderFlags = renderer->getRenderFlags();
@@ -393,7 +389,6 @@ Url::Url(const CelestiaState& appState, unsigned int _version, TimeSource _timeS
     else if (appState.coordSys == ObserverFrame::PhaseLock)
         nbBodies = 2;
 
-    fieldOfView = appState.fieldOfView;
     renderFlags = appState.renderFlags;
     labelMode = appState.labelMode;
 
@@ -427,7 +422,6 @@ Url::Url(const CelestiaState& appState, unsigned int _version, TimeSource _timeS
     if (selectedStr != "")
         u << "&select=" << selectedStr;
 
-    u << "&fov=" << fieldOfView;
     u << "&ts=" << timeScale;
     u << "&ltd=" << (lightTimeDelay ? 1 : 0);
     u << "&p=" << (pauseState ? 1 : 0);
@@ -490,9 +484,6 @@ void Url::initVersion2(std::map<std::string, std::string>& params, const std::st
             } else {
                 lightTimeDelay = false;
             }
-            if (params["fov"] != "") {
-                sscanf(params["fov"].c_str(), "%f", &fieldOfView);
-            }
             if (params["ts"] != "") {
                 sscanf(params["ts"].c_str(), "%f", &timeScale);
             }
@@ -542,8 +533,6 @@ void Url::initVersion3(std::map<std::string, std::string>& params, const std::st
     else
         lightTimeDelay = false;
 
-    if (params["fov"] != "")
-        sscanf(params["fov"].c_str(), "%f", &fieldOfView);
     if (params["ts"] != "")
         sscanf(params["ts"].c_str(), "%f", &timeScale);
 
@@ -711,7 +700,6 @@ void Url::goTo() {
         case Absolute:  // Intentional Fall-Through
         case Relative:
             sim->setFrame(ref.getCoordinateSystem(), ref.getRefObject(), ref.getTargetObject());
-            sim->getActiveObserver()->setFOV(degToRad(fieldOfView));
             sim->setTimeScale(timeScale);
             sim->setPauseState(pauseState);
             appCore->setLightDelayActive(lightTimeDelay);

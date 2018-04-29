@@ -31,11 +31,11 @@ string Asterism::getName(bool i18n) const {
     return i18n ? i18nName : name;
 }
 
-uint32_t Asterism::getChainCount() const {
+size_t Asterism::getChainCount() const {
     return static_cast<uint32_t>(chains.size());
 }
 
-const Asterism::Chain& Asterism::getChain(uint32_t index) const {
+const Asterism::Chain& Asterism::getChain(size_t index) const {
     return *chains[index];
 }
 

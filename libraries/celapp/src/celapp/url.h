@@ -94,7 +94,6 @@ private:
 
     ObserverFrame::CoordinateSystem mode;
     int nbBodies;
-    float fieldOfView;
     float timeScale;
     int renderFlags;
     int labelMode;
@@ -150,7 +149,6 @@ public:
     std::string trackedBodyName;
     UniversalCoord observerPosition{ 0, 0, 0 };
     Eigen::Quaternionf observerOrientation{ Eigen::Quaternionf::Identity() };
-    float fieldOfView{ 45.0f };
 
     // Time parameters
     double tdb{ 0 };

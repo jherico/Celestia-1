@@ -309,12 +309,10 @@ int SkyGrid::meridianSpacing(double idealSpacing) const {
 }
 
 void SkyGrid::render(Renderer& renderer, const Observer& observer) {
-    // 90 degree rotation about the x-axis used to transform coordinates
-    // to Celestia's system.
+    // 90 degree rotation about the x-axis used to transform coordinates to Celestia's system.
     static const Quaterniond xrot90 = XRotation(-PI / 2.0);
-    //Quaterniond xrot90 = Quaterniond(AngleAxis<double>(-PI / 2.0, Vector3d::UnitX()));//Quatd::xrotation(-PI / 2.0);
 
-    double vfov = observer.getFOV();
+    double vfov = 45.0f;
     double viewAspectRatio = 1.0;
 
     // Calculate the cosine of half the maximum field of view. We'll use this for

@@ -37,8 +37,15 @@ CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiAppli
     double curtime = (double)now.toMSecsSinceEpoch() / 1000.0;
     auto curtimeUnix = time(nullptr);
 
-
     _celestiaCore = std::make_shared<CelestiaCore>();
+
+    _window = new QWindow();
+    _window->setGeometry(100, 100, 800, 600);
+    _window->show();
+    _window->setIcon(QIcon(":/icons/celestia.png"));
+
+    _celestiaCore->setRenderer(std::make_shared<VulkanRenderer>(_window));
+
     QObject::connect(this, &QGuiApplication::aboutToQuit, this, &CelestiaVrApplication::onAboutToQuit);
     _celestiaCore->initSimulation("", {}, std::make_shared<AppProgressNotifier>());
     qDebug() << "Init";
@@ -48,12 +55,6 @@ CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiAppli
     _celestiaCore->setTimeZoneBias(timezoneBias);
     _celestiaCore->setTimeZoneName(tz.abbreviation(now).toStdString());
 
-    _window = new QWindow();
-    _window->setGeometry(100, -1000, 800, 600);
-    _window->show();
-    _window->setIcon(QIcon(":/images/celestia.png"));
-
-    _celestiaCore->setRenderer(std::make_shared<VulkanRenderer>(_window));
 }
 
 

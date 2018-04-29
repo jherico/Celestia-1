@@ -78,15 +78,15 @@ public:
     Renderer();
     ~Renderer();
 
-    virtual void initialize() {};
-    virtual void shutdown() {};
+    virtual void initialize(){};
+    virtual void shutdown(){};
 
     void setFaintestAM45deg(float);
     float getFaintestAM45deg() const;
     void setRenderMode(int);
     void autoMag(float& faintestMag);
 
-    void draw(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
+    void preRender(const Observer&, const Universe&, float faintestVisible, const Selection& sel);
 
     virtual void render(const ObserverPtr&, const UniversePtr&, float faintestVisible, const Selection& sel) = 0;
     enum
@@ -154,8 +154,7 @@ public:
     static const int DefaultRenderFlags = Renderer::ShowStars | Renderer::ShowPlanets | Renderer::ShowGalaxies |
                                           Renderer::ShowGlobulars | Renderer::ShowCloudMaps | Renderer::ShowAtmospheres |
                                           Renderer::ShowEclipseShadows | Renderer::ShowRingShadows | Renderer::ShowCometTails |
-                                          Renderer::ShowNebulae | Renderer::ShowOpenClusters | Renderer::ShowAutoMag |
-                                          Renderer::ShowSmoothLines;
+                                          Renderer::ShowNebulae | Renderer::ShowOpenClusters | Renderer::ShowAutoMag;
 
     int getRenderFlags() const;
     void setRenderFlags(int);
