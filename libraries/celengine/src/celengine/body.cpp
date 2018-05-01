@@ -50,7 +50,7 @@ void Body::setDefaultProperties() {
     mass = 0.0f;
     albedo = 0.5f;
     geometryOrientation = Quaternionf::Identity();
-    geometry = InvalidResource;
+    geometry.clear();
     surface = Surface(Color::White);
     atmosphere.reset();
     rings.reset();

@@ -64,7 +64,6 @@ struct PipelineVertexInputStateCreateInfo : public vk::PipelineVertexInputStateC
     std::vector<vk::VertexInputBindingDescription> bindingDescriptions;
     std::vector<vk::VertexInputAttributeDescription> attributeDescriptions;
 
-
     void update() {
         vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
         vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
@@ -120,9 +119,8 @@ private:
 
 public:
     GraphicsPipelineBuilder(const vk::Device& device, const vk::PipelineCache& cache = nullptr)
-        : device(device) {
-        pipelineCreateInfo.layout = layout;
-        pipelineCreateInfo.renderPass = renderPass;
+        : device{ device }
+        , pipelineCache{ cache } {
         init();
     }
 
@@ -171,11 +169,9 @@ public:
         return shaderStages.back();
     }
 
-    vk::Pipeline create(const vk::PipelineCache& cache) {
+    vk::Pipeline create() {
         update();
-        return device.createGraphicsPipeline(cache, pipelineCreateInfo);
+        return device.createGraphicsPipeline(pipelineCache, pipelineCreateInfo);
     }
-
-    vk::Pipeline create() { return create(pipelineCache); }
 };
 }}  // namespace vks::pipelines

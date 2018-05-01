@@ -29,6 +29,9 @@ public:
 
     operator bool() const { return buffer.operator bool(); }
 
+    vk::DescriptorBufferInfo getDescriptor(vk::DeviceSize size = VK_WHOLE_SIZE, vk::DeviceSize offset = 0) {
+        return vk::DescriptorBufferInfo{ buffer, offset, size };
+    }
     /**
         * Setup the default descriptor for this buffer
         *

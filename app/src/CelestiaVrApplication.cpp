@@ -20,10 +20,13 @@ public:
     void update(const std::string& s) { qDebug() << s.c_str(); }
 };
 
+//extern __stdcall void SetCurrentDirectoryA(const char*);
+
 CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiApplication(argc, argv) {
     qInstallMessageHandler(messageHandler);
     setApplicationName("CelestiaVR");
     SetDebugVerbosity(5);
+    SetCurrentDirectoryA("C:/Users/bdavi/git/Celestia2/resources");
 
     _timer = new QTimer();
     _timer->setInterval(15);
@@ -43,18 +46,14 @@ CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiAppli
     _window->setGeometry(100, 100, 800, 600);
     _window->show();
     _window->setIcon(QIcon(":/icons/celestia.png"));
-
     _celestiaCore->setRenderer(std::make_shared<VulkanRenderer>(_window));
-
     QObject::connect(this, &QGuiApplication::aboutToQuit, this, &CelestiaVrApplication::onAboutToQuit);
     _celestiaCore->initSimulation("", {}, std::make_shared<AppProgressNotifier>());
     qDebug() << "Init";
-
     // Set up the default time zone name and offset from UTC
     _celestiaCore->start(astro::UTCtoTDB(curtime / 86400.0 + (double)astro::Date(1970, 1, 1)));
     _celestiaCore->setTimeZoneBias(timezoneBias);
     _celestiaCore->setTimeZoneName(tz.abbreviation(now).toStdString());
-
 }
 
 

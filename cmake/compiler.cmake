@@ -2,6 +2,7 @@ set(CMAKE_CXX_FLAGS_DEBUG  "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
 
 if (WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-D_SILENCE_CXX17_NEGATORS_DEPRECATION_WARNING)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zi /EHsc /openmp")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG /OPT:REF /OPT:ICF")
     include(CheckCXXCompilerFlag)
@@ -10,4 +11,6 @@ if (WIN32)
         add_compile_options("/std:c++latest")
     endif()
 endif()
+
+
 

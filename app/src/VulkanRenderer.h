@@ -24,7 +24,7 @@ private slots:
 private:
     void createRenderPass();
     void createFramebuffers();
-    vk::CommandBuffer getFrameCommandBuffer();
+    void createDescriptorPool();
     void waitIdle();
 
 private:
@@ -55,28 +55,27 @@ private:
         vk::Semaphore renderComplete;
     } _semaphores;
 
-    struct Camera {
-        glm::mat4 projection;
-        glm::mat4 view;
+
+    struct CameraData {
+        struct Matrices {
+            glm::mat4 projection;
+            glm::mat4 view;
+        } matrices;
+        vks::Buffer ubo;
+        vk::DescriptorSetLayout descriptorSetLayout;
+        vk::DescriptorSet descriptorSet;
     } _camera;
 
-    std::vector<glm::mat4> _transforms;
-
-    struct {
-        vks::Buffer transforms;
-        vks::Buffer cameraUbo;
-    } _buffers;
 
     struct SkyGrids {
         struct PushContstants {
             glm::mat4 orientation;
             glm::vec4 color{ 1, 1, 1, 1 };
-        };
+        } pushConstants;
         vk::Pipeline pipeline;
         vks::Buffer vertices;
         vks::Buffer indices;
+        uint32_t indexCount;
         vk::PipelineLayout pipelineLayout;
-        vk::DescriptorSet descriptorSet;
-        vk::DescriptorSetLayout descriptorSetLayout;
     } _skyGrids;
 };

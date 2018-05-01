@@ -5,6 +5,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 add_executable(${TARGET_NAME} ${COMMON_SOURCES})
 
+add_dependencies(${TARGET_NAME} shaders)
+
 target_eigen()
 depend_libraries(celutil celastro celmath celephem celmodel celengine celapp vks)
 target_qt(Core Gui)

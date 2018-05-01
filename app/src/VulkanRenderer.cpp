@@ -2,16 +2,16 @@
 
 #include <mutex>
 
+#include <glm/gtc/matrix_transform.hpp> // glm::translate, glm::rotate, glm::scale, glm::perspective
+
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
-#include <QtCore/QTimer>
 #include <QtCore/QFileInfo>
+#include <QtCore/QTimer>
+
 #include <QtGui/QWindow>
 
 #include <celengine/skygrid.h>
-
-#if defined(Q_OS_WIN)
-#include <Windows.h>
-#endif
 
 #include <vks/pipelines.hpp>
 #include "CloseEventFilter.h"
@@ -81,9 +81,8 @@ void VulkanRenderer::initialize() {
     _context.enableValidation = true;
     _context.requireExtensions({ VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME });
     _context.requireDeviceExtensions({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
-    _context.createInstance();
-    auto surface = _context.instance.createWin32SurfaceKHR(
-        vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(NULL), (HWND)_window->winId() });
+    _context.createInstance(VK_MAKE_VERSION(1, 0, 0));
+    auto surface = _context.instance.createWin32SurfaceKHR(vk::Win32SurfaceCreateInfoKHR{ {}, GetModuleHandle(NULL), (HWND)_window->winId() });
     _context.createDevice(surface);
 
     _semaphores.acquireComplete = _device.createSemaphore({});
@@ -94,9 +93,23 @@ void VulkanRenderer::initialize() {
     _swapchain.create(_extent, true);
     createRenderPass();
     createFramebuffers();
+    createDescriptorPool();
 
-    // Camera UBO
-    { _buffers.cameraUbo = _context.createUniformBuffer(_camera); }
+    // Camera setup
+    {
+        _camera.ubo = _context.createUniformBuffer(_camera.matrices);
+        _camera.ubo.setupDescriptor();
+
+        std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+            { 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
+        };
+        _camera.descriptorSetLayout = _device.createDescriptorSetLayout({ {}, (uint32_t)setLayoutBindings.size(), setLayoutBindings.data() });
+        _camera.descriptorSet = _device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo{ _descriptorPool, 1, &_camera.descriptorSetLayout })[0];
+        std::vector<vk::WriteDescriptorSet> writeDescriptorSets{
+            { _camera.descriptorSet, 0, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &_camera.ubo.descriptor },
+        };
+        _device.updateDescriptorSets(writeDescriptorSets, nullptr);
+    }
 
     // skygrid setup
     {
@@ -121,20 +134,29 @@ void VulkanRenderer::initialize() {
                     float cosTheta = cos(theta);
                     glm::vec3 vertex{ sinTheta * cosPhi, sinTheta * sinPhi, cosTheta };
                     vertex *= 0.5f;
+                    indices.push_back((uint32_t)vertices.size());
                     vertices.push_back(vertex);
-                    indices.push_back(vertices.size());
+                }
+                for (uint32_t j = 0; j < GREAT_CIRCLE_SEGMENTS; ++j) {
+                    float theta = (j * thetaInterval) - QUARTER_TAUf;
+                    float sinTheta = sin(theta);
+                    float cosTheta = cos(theta);
+                    glm::vec3 vertex{ sinTheta * cosPhi, sinTheta * sinPhi, -cosTheta };
+                    vertex *= 0.5f;
+                    indices.push_back((uint32_t)vertices.size());
+                    vertices.push_back(vertex);
                 }
                 indices.push_back(UINT32_MAX);
             }
-
             _skyGrids.vertices = _context.stageToDeviceBuffer<glm::vec3>(vk::BufferUsageFlagBits::eVertexBuffer, vertices);
             _skyGrids.indices = _context.stageToDeviceBuffer<uint32_t>(vk::BufferUsageFlagBits::eIndexBuffer, indices);
+            _skyGrids.indexCount = indices.size();
         }
 
         // Pipeline layout
         {
             vk::PushConstantRange pushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(SkyGrids::PushContstants) };
-            _skyGrids.pipelineLayout = _device.createPipelineLayout({ {}, 0, nullptr, 1, &pushConstantRange });
+            _skyGrids.pipelineLayout = _device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, 1, &_camera.descriptorSetLayout, 1, &pushConstantRange });
         }
 
         {
@@ -152,7 +174,7 @@ void VulkanRenderer::initialize() {
             };
             builder.loadShader(getAssetPath() + "shaders/skygrid.vert.spv", vk::ShaderStageFlagBits::eVertex);
             builder.loadShader(getAssetPath() + "shaders/skygrid.frag.spv", vk::ShaderStageFlagBits::eFragment);
-            builder.create(_context.pipelineCache);
+            _skyGrids.pipeline = builder.create();
         }
     }
 
@@ -186,8 +208,8 @@ void VulkanRenderer::createRenderPass() {
 
     using vAF = vk::AccessFlagBits;
     using vPSF = vk::PipelineStageFlagBits;
-    subpassDependencies.push_back({ 0u, VK_SUBPASS_EXTERNAL, vPSF::eColorAttachmentOutput, vPSF::eBottomOfPipe,
-                                    vAF::eColorAttachmentWrite, vAF::eColorAttachmentRead, vk::DependencyFlagBits::eByRegion });
+    subpassDependencies.push_back({ 0u, VK_SUBPASS_EXTERNAL, vPSF::eColorAttachmentOutput, vPSF::eBottomOfPipe, vAF::eColorAttachmentWrite,
+                                    vAF::eColorAttachmentRead, vk::DependencyFlagBits::eByRegion });
     _renderPass = _device.createRenderPass({ {},
                                              (uint32_t)attachments.size(),
                                              attachments.data(),
@@ -211,6 +233,14 @@ void VulkanRenderer::createFramebuffers() {
     _framebuffers = _swapchain.createFramebuffers(framebufferCreateInfo);
 }
 
+void VulkanRenderer::createDescriptorPool() {
+    // Descriptor Pool
+    std::vector<vk::DescriptorPoolSize> poolSizes = {
+        { vk::DescriptorType::eUniformBuffer, 4 },
+    };
+    _descriptorPool = _device.createDescriptorPool({ {}, 2, (uint32_t)poolSizes.size(), poolSizes.data() });
+}
+
 void VulkanRenderer::shutdown() {
     if (_context.instance) {
         _ready = false;
@@ -229,16 +259,18 @@ void VulkanRenderer::shutdown() {
     }
 }
 
-void VulkanRenderer::render(const ObserverPtr& observerPtr,
-                            const UniversePtr& universePtr,
-                            float faintestVisible,
-                            const Selection& sel) {
+void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& universePtr, float faintestVisible, const Selection& sel) {
     if (_resizing || !_ready) {
         return;
     }
     const auto& observer = *observerPtr;
     const auto& universe = *universePtr;
     preRender(observer, universe, faintestVisible, sel);
+
+    _camera.matrices.projection = glm::perspective(TAUf / 8.0f, 4.0f / 3.0f, 0.01f, 100.f);
+    auto msecs = QDateTime::currentMSecsSinceEpoch() % 1000;
+    _camera.matrices.view = glm::rotate(glm::mat4(), (float)msecs / 1000.0f, glm::vec3{ 1, 0, 0 });
+    _camera.ubo.copy(_camera.matrices);
 
     uint32_t currentBuffer = _swapchain.acquireNextImage(_semaphores.acquireComplete).value;
 
@@ -250,8 +282,12 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
     _frame.commandBuffer = _context.allocateCommandBuffers(1)[0];
     _frame.framebuffer = _framebuffers[currentBuffer];
     _frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-    _frame.commandBuffer.beginRenderPass({ _renderPass, _frame.framebuffer, { {}, _extent }, 1, &CLEAR_COLOR },
-                                         vk::SubpassContents::eInline);
+    _frame.commandBuffer.beginRenderPass({ _renderPass, _frame.framebuffer, { {}, _extent }, 1, &CLEAR_COLOR }, vk::SubpassContents::eInline);
+
+
+
+    _frame.commandBuffer.setViewport(0, vks::util::viewport(_extent));
+    _frame.commandBuffer.setScissor(0, vks::util::rect2D(_extent));
 
     // Render sky grids first--these will always be in the background
     renderSkyGrids(observer);
@@ -314,8 +350,7 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
     _frame.commandBuffer.end();
 
     auto fence = _device.createFence({});
-    _context.submit(_frame.commandBuffer, { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe },
-                    _semaphores.renderComplete, fence);
+    _context.submit(_frame.commandBuffer, { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe }, _semaphores.renderComplete, fence);
     _swapchain.queuePresent(_semaphores.renderComplete);
     _context.emptyDumpster(fence);
     _device.waitForFences(fence, VK_TRUE, UINT64_MAX);
@@ -323,6 +358,20 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr,
 }
 
 void VulkanRenderer::renderSkyGrids(const Observer& observer) {
+
+
+    // Submit via push constant (rather than a UBO)
+    _frame.commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, _skyGrids.pipeline);
+    _frame.commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, _skyGrids.pipelineLayout, 0, _camera.descriptorSet, nullptr);
+    _frame.commandBuffer.bindVertexBuffers(0, _skyGrids.vertices.buffer, { 0 });
+    _frame.commandBuffer.bindIndexBuffer(_skyGrids.indices.buffer, 0, vk::IndexType::eUint32);
+    _frame.commandBuffer.setLineWidth(1.5f);
+
+    _skyGrids.pushConstants.color = glm::vec4(EquatorialGridColor.red(), EquatorialGridColor.green(), EquatorialGridColor.blue(), 1.0f);
+    _frame.commandBuffer.pushConstants<SkyGrids::PushContstants>(_skyGrids.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, _skyGrids.pushConstants);
+    _frame.commandBuffer.drawIndexed(_skyGrids.indexCount, 1, 0, 0, 0);
+
+
     if (renderFlags & ShowCelestialSphere) {
         SkyGrid grid;
         grid.setOrientation(Quaterniond(AngleAxis<double>(astro::J2000Obliquity, Vector3d::UnitX())));

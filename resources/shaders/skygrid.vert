@@ -5,12 +5,10 @@
 
 layout (location = 0) in vec4 inPos;
 
-/*
 layout (binding = 0) uniform Camera {
     mat4 projection;
     mat4 view;
 } camera;
-*/
 
 layout(push_constant) uniform PushConsts {
     mat4 orientation;
@@ -26,7 +24,7 @@ out gl_PerVertex {
 
 void main() {
 	outColor = pushConsts.color;
-	//gl_Position = camera.projection * camera.view * pushConsts.orientation * inPos;
-    gl_Position = pushConsts.orientation * inPos;
+	gl_Position = camera.projection * camera.view * inPos;
+    //gl_Position = pushConsts.orientation * inPos;
 }
 

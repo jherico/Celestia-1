@@ -100,7 +100,7 @@ Vector3d JPLEphemeris::getPlanetPosition(JPLEphemItem planet, double tjd) const 
         tjd = endDate;
 
     // recNo is always >= 0:
-    uint32_t recNo = (uint32_t)((tjd - startDate) / daysPerInterval);
+    size_t recNo = (uint32_t)((tjd - startDate) / daysPerInterval);
     // Make sure we don't go past the end of the array if t == endDate
     if (recNo >= records.size())
         recNo = records.size() - 1;
