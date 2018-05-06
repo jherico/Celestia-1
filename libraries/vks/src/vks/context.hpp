@@ -222,16 +222,17 @@ public:
 
         instance = vk::createInstance(instanceCreateInfo);
         dynamicDispatch.init(instance);
+
+        if (enableValidation) {
+            debug::setupDebugging(instance, vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning);
+        }
+
     }
 
     void createDevice(const vk::SurfaceKHR& surface = nullptr) {
         pickDevice(surface);
         buildDevice();
         dynamicDispatch.init(instance, device);
-
-        if (enableValidation) {
-            debug::setupDebugging(instance, vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning);
-        }
 
         if (enableDebugMarkers) {
             debug::marker::setup(instance, device);

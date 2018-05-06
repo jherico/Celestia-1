@@ -23,8 +23,7 @@ out gl_PerVertex {
 };
 
 void main() {
-	outColor = pushConsts.color;
-	gl_Position = camera.projection * camera.view * inPos;
-    //gl_Position = pushConsts.orientation * inPos;
+    outColor = pushConsts.color;
+    gl_Position = camera.projection * camera.view * pushConsts.orientation * inPos;
 }
 

@@ -124,24 +124,15 @@ void VulkanRenderer::initialize() {
             vertices.reserve(MERIDIANS * GREAT_CIRCLE_SEGMENTS);
             std::vector<uint32_t> indices;
             indices.reserve(MERIDIANS * GREAT_CIRCLE_SEGMENTS);
-            for (uint32_t i = 0; i < 24; ++i) {
+            for (uint32_t i = 0; i < MERIDIANS; ++i) {
                 float phi = (phiInterval * i) - HALF_TAUf;
                 float sinPhi = sin(phi);
                 float cosPhi = cos(phi);
                 for (uint32_t j = 0; j < GREAT_CIRCLE_SEGMENTS; ++j) {
-                    float theta = (j * thetaInterval) - QUARTER_TAUf;
+                    float theta = (j * thetaInterval);
                     float sinTheta = sin(theta);
                     float cosTheta = cos(theta);
                     glm::vec3 vertex{ sinTheta * cosPhi, sinTheta * sinPhi, cosTheta };
-                    vertex *= 0.5f;
-                    indices.push_back((uint32_t)vertices.size());
-                    vertices.push_back(vertex);
-                }
-                for (uint32_t j = 0; j < GREAT_CIRCLE_SEGMENTS; ++j) {
-                    float theta = (j * thetaInterval) - QUARTER_TAUf;
-                    float sinTheta = sin(theta);
-                    float cosTheta = cos(theta);
-                    glm::vec3 vertex{ sinTheta * cosPhi, sinTheta * sinPhi, -cosTheta };
                     vertex *= 0.5f;
                     indices.push_back((uint32_t)vertices.size());
                     vertices.push_back(vertex);
@@ -259,6 +250,8 @@ void VulkanRenderer::shutdown() {
     }
 }
 
+static const uint32_t LOOP_INTERVAL_MS = 10000;
+
 void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& universePtr, float faintestVisible, const Selection& sel) {
     if (_resizing || !_ready) {
         return;
@@ -268,8 +261,10 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& u
     preRender(observer, universe, faintestVisible, sel);
 
     _camera.matrices.projection = glm::perspective(TAUf / 8.0f, 4.0f / 3.0f, 0.01f, 100.f);
-    auto msecs = QDateTime::currentMSecsSinceEpoch() % 1000;
-    _camera.matrices.view = glm::rotate(glm::mat4(), (float)msecs / 1000.0f, glm::vec3{ 1, 0, 0 });
+    auto msecs = QDateTime::currentMSecsSinceEpoch() % LOOP_INTERVAL_MS;
+    float interval = (float)msecs / (float)LOOP_INTERVAL_MS;
+    
+    _camera.matrices.view = glm::rotate(glm::mat4(), (float)interval * TAUf, glm::vec3{ 1, 0, 0 });
     _camera.ubo.copy(_camera.matrices);
 
     uint32_t currentBuffer = _swapchain.acquireNextImage(_semaphores.acquireComplete).value;
@@ -357,7 +352,31 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& u
     _context.recycle();
 }
 
+template <typename PREC>
+glm::tquat<PREC, glm::highp> toGlm(const Eigen::Quaternion<PREC>& q) {
+    return glm::tquat<PREC, glm::highp>(q.w(), q.x(), q.y(), q.z());
+}
+
+template <typename PREC>
+glm::mat4 toMat4(const Eigen::Quaternion<PREC>& q) {
+    return glm::mat4_cast(glm::quat(toGlm<double>(q)));
+}
+
+glm::vec4 toGlm(const Color& color) {
+    return glm::vec4(color.red(), color.green(), color.blue(), color.alpha());
+}
+
+
+
 void VulkanRenderer::renderSkyGrids(const Observer& observer) {
+    static const auto ALL_GRIDS = ShowCelestialSphere | ShowGalacticGrid | ShowEclipticGrid;
+
+    // DEBUG
+    renderFlags |= ALL_GRIDS;
+
+    if (0 == (renderFlags & ALL_GRIDS)) {
+        return;
+    }
 
 
     // Submit via push constant (rather than a UBO)
@@ -367,35 +386,27 @@ void VulkanRenderer::renderSkyGrids(const Observer& observer) {
     _frame.commandBuffer.bindIndexBuffer(_skyGrids.indices.buffer, 0, vk::IndexType::eUint32);
     _frame.commandBuffer.setLineWidth(1.5f);
 
-    _skyGrids.pushConstants.color = glm::vec4(EquatorialGridColor.red(), EquatorialGridColor.green(), EquatorialGridColor.blue(), 1.0f);
-    _frame.commandBuffer.pushConstants<SkyGrids::PushContstants>(_skyGrids.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, _skyGrids.pushConstants);
-    _frame.commandBuffer.drawIndexed(_skyGrids.indexCount, 1, 0, 0, 0);
 
 
     if (renderFlags & ShowCelestialSphere) {
-        SkyGrid grid;
-        grid.setOrientation(Quaterniond(AngleAxis<double>(astro::J2000Obliquity, Vector3d::UnitX())));
-        grid.setLineColor(EquatorialGridColor);
-        grid.setLabelColor(EquatorialGridLabelColor);
-        grid.render(*this, observer);
+        _skyGrids.pushConstants.orientation = toMat4(Quaterniond(AngleAxis<double>(astro::J2000Obliquity, Vector3d::UnitX())));
+        _skyGrids.pushConstants.color = toGlm(EquatorialGridColor);
+        _frame.commandBuffer.pushConstants<SkyGrids::PushContstants>(_skyGrids.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, _skyGrids.pushConstants);
+        _frame.commandBuffer.drawIndexed(_skyGrids.indexCount, 1, 0, 0, 0);
     }
 
     if (renderFlags & ShowGalacticGrid) {
-        SkyGrid galacticGrid;
-        galacticGrid.setOrientation((astro::eclipticToEquatorial() * astro::equatorialToGalactic()).conjugate());
-        galacticGrid.setLineColor(GalacticGridColor);
-        galacticGrid.setLabelColor(GalacticGridLabelColor);
-        galacticGrid.setLongitudeUnits(SkyGrid::LongitudeDegrees);
-        galacticGrid.render(*this, observer);
+        _skyGrids.pushConstants.orientation = toMat4((astro::eclipticToEquatorial() * astro::equatorialToGalactic()).conjugate());
+        _skyGrids.pushConstants.color = toGlm(GalacticGridColor);
+        _frame.commandBuffer.pushConstants<SkyGrids::PushContstants>(_skyGrids.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, _skyGrids.pushConstants);
+        _frame.commandBuffer.drawIndexed(_skyGrids.indexCount, 1, 0, 0, 0);
     }
 
     if (renderFlags & ShowEclipticGrid) {
-        SkyGrid grid;
-        grid.setOrientation(Quaterniond::Identity());
-        grid.setLineColor(EclipticGridColor);
-        grid.setLabelColor(EclipticGridLabelColor);
-        grid.setLongitudeUnits(SkyGrid::LongitudeDegrees);
-        grid.render(*this, observer);
+        _skyGrids.pushConstants.orientation = glm::mat4();
+        _skyGrids.pushConstants.color = toGlm(EclipticGridColor);
+        _frame.commandBuffer.pushConstants<SkyGrids::PushContstants>(_skyGrids.pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, _skyGrids.pushConstants);
+        _frame.commandBuffer.drawIndexed(_skyGrids.indexCount, 1, 0, 0, 0);
     }
 
     if (renderFlags & ShowHorizonGrid) {

@@ -1,8 +1,12 @@
 #include "CelestiaVrApplication.h"
 
+#include <mutex>
+
 #include <QtCore/QDateTime>
 #include <QtCore/QTimer>
 #include <QtCore/QTimeZone>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 
 #include <QtGui/QWindow>
 
@@ -21,17 +25,22 @@ public:
 };
 
 //extern __stdcall void SetCurrentDirectoryA(const char*);
+QString getResourceRoot() {
+    static QString resourceRoot;
+    static std::once_flag once;
+    std::call_once(once, [&] {
+        resourceRoot = QDir::cleanPath(QFileInfo(__FILE__).absoluteDir().absoluteFilePath("../../resources"));
+    });
+    return resourceRoot;
+}
+
 
 CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiApplication(argc, argv) {
+    QDir::setCurrent(getResourceRoot());
     qInstallMessageHandler(messageHandler);
     setApplicationName("CelestiaVR");
     SetDebugVerbosity(5);
-    SetCurrentDirectoryA("C:/Users/bdavi/git/Celestia2/resources");
 
-    _timer = new QTimer();
-    _timer->setInterval(15);
-    connect(_timer, &QTimer::timeout, this, &CelestiaVrApplication::onTimer);
-    _timer->start();
 
     auto now = QDateTime::currentDateTime();
     auto timespec = now.timeSpec();
@@ -54,6 +63,11 @@ CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiAppli
     _celestiaCore->start(astro::UTCtoTDB(curtime / 86400.0 + (double)astro::Date(1970, 1, 1)));
     _celestiaCore->setTimeZoneBias(timezoneBias);
     _celestiaCore->setTimeZoneName(tz.abbreviation(now).toStdString());
+
+    _timer = new QTimer();
+    _timer->setInterval(15);
+    connect(_timer, &QTimer::timeout, this, &CelestiaVrApplication::onTimer);
+    _timer->start();
 }
 
 

@@ -15,6 +15,5 @@ FILE __iob_func[3] = { *stdin, *stdout, *stderr };
 // to the main Celestia window.
 
 int main(int argc, char* argv[]) {
-    QDir::setCurrent("C:/Users/bdavi/Git/celestia/resources/");
     return CelestiaVrApplication(argc, argv).exec();
 }
