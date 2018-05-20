@@ -151,7 +151,7 @@ public:
      *  star in an orbit, the position should be set to the 'root' barycenter
      *  of the system.
      */
-    Eigen::Vector3f getPosition() const { return position; }
+    const Eigen::Vector3f& getPosition() const { return position; }
 
     float getAbsoluteMagnitude() const { return absMag; }
 

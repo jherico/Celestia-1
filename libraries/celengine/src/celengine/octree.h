@@ -170,6 +170,7 @@ class StaticOctree {
     friend class DynamicOctree<OBJ, PREC>;
 
 public:
+    using Frustum = std::array<Eigen::Hyperplane<PREC, 3>, 5>;
     using PointType = Eigen::Matrix<PREC, 3, 1>;
     using Pointer = std::shared_ptr<StaticOctree>;
     using ObjectPtr = std::shared_ptr<OBJ>;
@@ -194,7 +195,7 @@ public:
     // (if one is required) is the responsibility of the callback method.
     void processVisibleObjects(OctreeProcessor<OBJ, PREC>& processor,
                                const PointType& obsPosition,
-                               const Eigen::Hyperplane<PREC, 3>* frustumPlanes,
+                               const Frustum& frustumPlanes,
                                float limitingFactor,
                                PREC scale) const;
 

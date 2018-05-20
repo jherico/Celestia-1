@@ -1,17 +1,28 @@
 #pragma once
 #include <QtCore/QObject>
+#include <QtGui/QWindow>
+
 #include <celengine/render.h>
 #include <vks/context.hpp>
 #include <vks/swapchain.hpp>
 
-class QWindow;
 class QTimer;
 
+class QResizableWindow : public QWindow {
+    Q_OBJECT
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
+signals:
+    void resizing();
+};
+
 class VulkanRenderer : public QObject, public Renderer {
+    Q_OBJECT
     using Parent = Renderer;
 
 public:
-    VulkanRenderer(QWindow* window) : _window(window) {}
+    VulkanRenderer(QResizableWindow* window);
     void initialize() override;
     void render(const ObserverPtr&, const UniversePtr&, float faintestVisible, const Selection& sel) override;
     void shutdown() override;
@@ -30,7 +41,7 @@ private:
 private:
     void renderSkyGrids(const Observer&);
     void renderDeepSkyObjects(const Universe& universe, const Observer& observer, const float faintestMagNight);
-    void renderStars(const StarDatabase& starDB, float faintestMagNight, const Observer& observer);
+    void renderStars(const Observer& observer, const StarDatabase& starDB, float faintestMagNight);
 
 private:
     QTimer* _resizeTimer{ nullptr };
@@ -55,7 +66,6 @@ private:
         vk::Semaphore renderComplete;
     } _semaphores;
 
-
     struct CameraData {
         struct Matrices {
             glm::mat4 projection;
@@ -66,16 +76,31 @@ private:
         vk::DescriptorSet descriptorSet;
     } _camera;
 
-
     struct SkyGrids {
         struct PushContstants {
             glm::mat4 orientation;
             glm::vec4 color{ 1, 1, 1, 1 };
         } pushConstants;
         vk::Pipeline pipeline;
+        vk::PipelineLayout pipelineLayout;
         vks::Buffer vertices;
         vks::Buffer indices;
         uint32_t indexCount;
-        vk::PipelineLayout pipelineLayout;
+        void setup(const vks::Context& context, const vk::RenderPass& renderPass, const vk::ArrayProxy<const vk::DescriptorSetLayout>& layouts);
+        void render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets, uint32_t renderFlags);
     } _skyGrids;
+
+    struct Stars {
+        vk::Pipeline starPipeline;
+        vk::PipelineLayout pipelineLayout;
+        vk::Pipeline glarePipeline;
+        vks::Buffer glareVertices;
+        uint32_t glareVertexCount{ 0 };
+        vks::Buffer starVertices;
+        uint32_t starVertexCount{ 0 };
+
+        void setup(const vks::Context& context, const vk::RenderPass& renderPass, const vk::ArrayProxy<const vk::DescriptorSetLayout>& layouts);
+        void update(const StarDatabase& starDB);
+        void render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets);
+    } _stars;
 };

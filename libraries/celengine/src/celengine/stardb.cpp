@@ -345,26 +345,9 @@ string StarDatabase::getStarNameList(const Star& star, const uint32_t maxNames) 
 void StarDatabase::findVisibleStars(StarHandler& starHandler,
                                     const Vector3f& position,
                                     const Quaternionf& orientation,
-                                    float fovY,
-                                    float aspectRatio,
+                                    const StarOctree::Frustum& frustum,
                                     float limitingMag) const {
-    // Compute the bounding planes of an infinite view frustum
-    Hyperplane<float, 3> frustumPlanes[5];
-    Vector3f planeNormals[5];
-    Eigen::Matrix3f rot = orientation.toRotationMatrix();
-    float h = (float)tan(fovY / 2);
-    float w = h * aspectRatio;
-    planeNormals[0] = Vector3f(0.0f, 1.0f, -h);
-    planeNormals[1] = Vector3f(0.0f, -1.0f, -h);
-    planeNormals[2] = Vector3f(1.0f, 0.0f, -w);
-    planeNormals[3] = Vector3f(-1.0f, 0.0f, -w);
-    planeNormals[4] = Vector3f(0.0f, 0.0f, -1.0f);
-    for (int i = 0; i < 5; i++) {
-        planeNormals[i] = rot.transpose() * planeNormals[i].normalized();
-        frustumPlanes[i] = Hyperplane<float, 3>(planeNormals[i], position);
-    }
-
-    octreeRoot->processVisibleObjects(starHandler, position, frustumPlanes, limitingMag, STAR_OCTREE_ROOT_SIZE);
+    octreeRoot->processVisibleObjects(starHandler, position, frustum, limitingMag, STAR_OCTREE_ROOT_SIZE);
 }
 
 void StarDatabase::findCloseStars(StarHandler& starHandler, const Vector3f& position, float radius) const {
@@ -466,8 +449,7 @@ bool StarDatabase::loadBinary(istream& in) {
 
     auto nStars = size();
     uint32_t totalStars = size() + nStarsInFile;
-
-    unsortedStars.reserve(totalStars);
+    stars.reserve(totalStars);
     while (((uint32_t)nStars) < totalStars) {
         uint32_t catNo = 0;
         float x = 0.0f, y = 0.0f, z = 0.0f;
@@ -505,7 +487,7 @@ bool StarDatabase::loadBinary(istream& in) {
 
         star->setDetails(details);
         star->setCatalogNumber(catNo);
-        unsortedStars.push_back(star);
+        stars.push_back(star);
 
         nStars++;
     }
@@ -520,10 +502,8 @@ bool StarDatabase::loadBinary(istream& in) {
     // will be used to lookup stars during file loading. After loading is
     // complete, the stars are sorted into an octree and this list gets
     // replaced.
-    if (unsortedStars.size() > 0) {
-        auto size = unsortedStars.size();
-        binFileCatalogNumberIndex.resize(size);
-        binFileCatalogNumberIndex = unsortedStars;
+    if (stars.size() > 0) {
+        binFileCatalogNumberIndex = stars;
         std::sort(binFileCatalogNumberIndex.begin(), binFileCatalogNumberIndex.end(), PtrCatalogNumberOrderingPredicate);
     }
 
@@ -531,7 +511,7 @@ bool StarDatabase::loadBinary(istream& in) {
 }
 
 void StarDatabase::finish() {
-    clog << _("Total star count: ") << unsortedStars.size() << endl;
+    clog << _("Total star count: ") << stars.size() << endl;
 
     buildOctree();
     buildIndexes();
@@ -1015,10 +995,10 @@ bool StarDatabase::load(istream& in, const string& resourcePath) {
 
         if (ok) {
             if (isNewStar) {
-                unsortedStars.push_back(star);
+                stars.push_back(star);
 
                 // Add the new star to the temporary (load time) index.
-                stcFileCatalogNumberIndex[catalogNumber] = unsortedStars[unsortedStars.size() - 1];
+                stcFileCatalogNumberIndex[catalogNumber] = stars[stars.size() - 1];
             }
 
             if (namesDB != NULL && !objName.empty()) {
@@ -1059,12 +1039,19 @@ void StarDatabase::buildOctree() {
     DPRINTF(1, "Sorting stars into octree . . .\n");
     float absMag = astro::appToAbsMag(STAR_OCTREE_MAGNITUDE, STAR_OCTREE_ROOT_SIZE * (float)sqrt(3.0));
     auto root = std::make_shared<DynamicOctree<Star, float>>(Vector3f(1000.0f, 1000.0f, 1000.0f), absMag);
-    for (uint32_t i = 0; i < unsortedStars.size(); ++i) {
-        root->insertObject(unsortedStars[i], STAR_OCTREE_ROOT_SIZE);
+
+    for (const auto& star : stars) {
+        root->insertObject(star, STAR_OCTREE_ROOT_SIZE);
     }
+
+    stars.clear();
 
     DPRINTF(1, "Spatially sorting stars for improved locality of reference . . .\n");
     root->rebuildAndSort(octreeRoot, stars);
+    auto starCount = stars.size();
+    for (size_t i = 0; i < starCount; ++i) {
+        starIndices[stars[i]] = i;
+    }
 
     // ASSERT((int) (firstStar - sortedStars) == nStars);
     //DPRINTF(1, "%d stars total\n", (int)(firstStar - sortedStars));
@@ -1079,8 +1066,6 @@ void StarDatabase::buildOctree() {
     }
 #endif
 
-    // Clean up . . .
-    unsortedStars.clear();
 }
 
 void StarDatabase::buildIndexes() {

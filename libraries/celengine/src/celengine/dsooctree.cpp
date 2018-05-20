@@ -62,7 +62,7 @@ DynamicOctree<DeepSkyObject, double>::ExclusionFactorDecayFunction DynamicOctree
 template <>
 void StaticOctree<DeepSkyObject, double>::processVisibleObjects(DSOHandler& processor,
                                       const PointType& obsPosition,
-                                      const Hyperplane<double, 3>* frustumPlanes,
+                                      const Frustum& frustumPlanes,
                                       float limitingFactor,
                                       double scale) const {
     // See if this node lies within the view frustum

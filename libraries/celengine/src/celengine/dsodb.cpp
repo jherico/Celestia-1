@@ -129,8 +129,9 @@ void DSODatabase::findVisibleDSOs(DSOHandler& dsoHandler,
                                   float fovY,
                                   float aspectRatio,
                                   float limitingMag) const {
+    
     // Compute the bounding planes of an infinite view frustum
-    Hyperplane<double, 3> frustumPlanes[5];
+    DSOOctree::Frustum frustumPlanes;
     Vector3d planeNormals[5];
 
     Quaterniond obsOrientd = obsOrient.cast<double>();

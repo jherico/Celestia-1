@@ -6,12 +6,13 @@
 
 class CelestiaCore;
 class Renderer;
+class QResizableWindow;
 
 class CelestiaVrApplication : public QGuiApplication {
     Q_OBJECT
 
 public:
-    CelestiaVrApplication(int, char*[]);
+    CelestiaVrApplication(int, char* []);
 
 private slots:
     void onTimer();
@@ -20,6 +21,6 @@ private slots:
 private:
     bool _aboutToQuit{ false };
     std::shared_ptr<CelestiaCore> _celestiaCore;
-    QWindow* _window{ nullptr };
+    QResizableWindow* _window{ nullptr };
     QTimer* _timer{ nullptr };
 };

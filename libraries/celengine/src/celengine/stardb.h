@@ -36,7 +36,9 @@ static const uint32_t MAX_STAR_NAMES = 10;
 template <class T>
 class BlockArray {
 public:
-    BlockArray() : m_blockSize(1000), m_elementCount(0) {}
+    BlockArray()
+        : m_blockSize(1000)
+        , m_elementCount(0) {}
 
     ~BlockArray() { clear(); }
 
@@ -87,8 +89,8 @@ public:
     StarDatabase();
     ~StarDatabase();
 
-    inline const StarPtr& getStar(const uint32_t) const;
-    inline uint32_t size() const;
+    inline const StarPtr& getStar(uint32_t n) const { return stars.at(n); }
+    inline uint32_t size() const { return (uint32_t)stars.size(); }
 
     StarPtr find(uint32_t catalogNumber) const;
     StarPtr find(const std::string&) const;
@@ -99,8 +101,7 @@ public:
     void findVisibleStars(StarHandler& starHandler,
                           const Eigen::Vector3f& obsPosition,
                           const Eigen::Quaternionf& obsOrientation,
-                          float fovY,
-                          float aspectRatio,
+                          const StarOctree::Frustum& frustum,
                           float limitingMag) const;
 
     void findCloseStars(StarHandler& starHandler, const Eigen::Vector3f& obsPosition, float radius) const;
@@ -151,8 +152,6 @@ public:
 
     void finish();
 
-    static StarDatabase* read(std::istream&);
-
     static const char* FILE_HEADER;
     static const char* CROSSINDEX_FILE_HEADER;
 
@@ -169,6 +168,7 @@ private:
     StarPtr findWhileLoading(uint32_t catalogNumber) const;
 
     std::vector<StarPtr> stars;
+    std::unordered_map<StarPtr, size_t> starIndices;
     StarNameDatabase::Pointer namesDB;
     std::vector<StarPtr> catalogNumberIndex;
     StarOctreePtr octreeRoot;
@@ -178,7 +178,7 @@ private:
 
     // These values are used by the star database loader; they are
     // not used after loading is complete.
-    std::vector<StarPtr> unsortedStars;
+    //std::vector<StarPtr> unsortedStars;
     // List of stars loaded from binary file, sorted by catalog number
     std::vector<StarPtr> binFileCatalogNumberIndex;
     // Catalog number -> star mapping for stars loaded from stc files
@@ -190,13 +190,5 @@ private:
     };
     std::vector<BarycenterUsage> barycenters;
 };
-
-const StarPtr& StarDatabase::getStar(const uint32_t n) const {
-    return stars.at(n);
-}
-
-uint32_t StarDatabase::size() const {
-    return (uint32_t)stars.size();
-}
 
 #endif  // _CELENGINE_STARDB_H_

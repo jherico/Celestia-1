@@ -51,7 +51,7 @@ CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiAppli
 
     _celestiaCore = std::make_shared<CelestiaCore>();
 
-    _window = new QWindow();
+    _window = new QResizableWindow();
     _window->setGeometry(100, 100, 800, 600);
     _window->show();
     _window->setIcon(QIcon(":/icons/celestia.png"));

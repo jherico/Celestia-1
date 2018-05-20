@@ -493,7 +493,7 @@ Selection Universe::pickStar(const UniversalCoord& origin,
     rotation.setFromTwoVectors(-Vector3f::UnitZ(), direction);
 
     StarPicker picker(o, direction, when, tolerance);
-    starCatalog->findVisibleStars(picker, o, rotation.conjugate(), tolerance, 1.0f, faintestMag);
+//    starCatalog->findVisibleStars(picker, o, rotation.conjugate(), tolerance, 1.0f, faintestMag);
     if (picker.pickedStar != NULL)
         return Selection(picker.pickedStar);
     else

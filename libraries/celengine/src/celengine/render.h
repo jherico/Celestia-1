@@ -396,12 +396,12 @@ protected:
     std::vector<StarConstPtr> nearStars;
     std::vector<LightSource> lightSourceList;
     int currentIntervalIndex;
+    float distanceLimit;
 
 private:
     uint32_t lastOrbitCacheFlush;
 
     float minOrbitSize;
-    float distanceLimit;
     float minFeatureSize;
     uint32_t locationFilter;
     SkyContourPoint* skyContour;

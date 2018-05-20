@@ -76,7 +76,7 @@ DynamicOctree<Star, float>::ExclusionFactorDecayFunction DynamicOctree<Star, flo
 template <>
 void StarOctree::processVisibleObjects(StarHandler& processor,
                                        const Vector3f& obsPosition,
-                                       const Hyperplane<float, 3>* frustumPlanes,
+                                       const Frustum& frustumPlanes,
                                        float limitingFactor,
                                        float scale) const {
     // See if this node lies within the view frustum
