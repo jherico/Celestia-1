@@ -6,7 +6,7 @@
 layout (location = 0) in vec4 inPosAndSize;
 layout (location = 1) in vec4 inColor;
 
-layout (binding = 0) uniform Camera {
+layout (set = 0, binding = 0) uniform Camera {
     mat4 projection;
     mat4 view;
 } camera;
@@ -20,8 +20,8 @@ out gl_PerVertex {
 
 void main() {
     outColor = vec4(inColor.rgb, 1.0);
-    //gl_PointSize = inPosAndSize.w;
-    gl_PointSize = inColor.a * 6.0;
+    gl_PointSize = inPosAndSize.w;
+    //gl_PointSize = inColor.a * 6.0;
     gl_Position = camera.projection * camera.view * vec4(inPosAndSize.xyz, 1.0);
 }
 

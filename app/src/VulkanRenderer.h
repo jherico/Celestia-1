@@ -5,6 +5,7 @@
 #include <celengine/render.h>
 #include <vks/context.hpp>
 #include <vks/swapchain.hpp>
+#include <vks/texture.hpp>
 
 class QTimer;
 
@@ -86,20 +87,26 @@ private:
         vks::Buffer vertices;
         vks::Buffer indices;
         uint32_t indexCount;
-        void setup(const vks::Context& context, const vk::RenderPass& renderPass, const vk::ArrayProxy<const vk::DescriptorSetLayout>& layouts);
+        void setup(VulkanRenderer& renderer);
         void render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets, uint32_t renderFlags);
     } _skyGrids;
 
     struct Stars {
-        vk::Pipeline starPipeline;
+        vk::DescriptorPool descriptorPool;
+        vk::DescriptorSetLayout descriptorSetLayout;
         vk::PipelineLayout pipelineLayout;
+        vk::Pipeline starPipeline;
+        vk::DescriptorSet starDescriptorSet;
         vk::Pipeline glarePipeline;
+        vk::DescriptorSet glareDescriptorSet;
         vks::Buffer glareVertices;
         uint32_t glareVertexCount{ 0 };
         vks::Buffer starVertices;
         uint32_t starVertexCount{ 0 };
+        vks::texture::Texture2D gaussianDiscTex;
+        vks::texture::Texture2D gaussianGlareTex;
 
-        void setup(const vks::Context& context, const vk::RenderPass& renderPass, const vk::ArrayProxy<const vk::DescriptorSetLayout>& layouts);
+        void setup(VulkanRenderer& renderer);
         void update(const StarDatabase& starDB);
         void render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets);
     } _stars;

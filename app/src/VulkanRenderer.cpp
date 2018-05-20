@@ -3,6 +3,8 @@
 #include <mutex>
 
 #include <glm/gtc/matrix_transform.hpp>  // glm::translate, glm::rotate, glm::scale, glm::perspective
+#include <gli/texture.hpp>
+#include <gli/texture2d.hpp>
 
 #include <QtCore/QDateTime>
 #include <QtCore/QDir>
@@ -131,8 +133,8 @@ void VulkanRenderer::initialize() {
     }
 
     // skygrid setup
-    _skyGrids.setup(_context, _renderPass, _camera.descriptorSetLayout);
-    _stars.setup(_context, _renderPass, _camera.descriptorSetLayout);
+    _skyGrids.setup(*this);
+    _stars.setup(*this);
     _ready = true;
 }
 
@@ -517,7 +519,7 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& u
     _context.submit(_frame.commandBuffer, { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe }, _semaphores.renderComplete, fence);
     try {
         _swapchain.queuePresent(_semaphores.renderComplete);
-    } catch (const vk::OutOfDateKHRError& err) {
+    } catch (const vk::OutOfDateKHRError&) {
         _resizing = true;
         _resizeTimer->start();
     }
@@ -540,9 +542,8 @@ glm::vec4 toGlm(const Color& color) {
     return glm::vec4(color.red(), color.green(), color.blue(), color.alpha());
 }
 
-void VulkanRenderer::SkyGrids::setup(const vks::Context& context,
-                                     const vk::RenderPass& renderPass,
-                                     const vk::ArrayProxy<const vk::DescriptorSetLayout>& layouts) {
+void VulkanRenderer::SkyGrids::setup(VulkanRenderer& renderer) {
+    const auto& context = renderer._context;
     {
         std::vector<glm::vec3> vertices;
         std::vector<uint32_t> indices;
@@ -611,14 +612,15 @@ void VulkanRenderer::SkyGrids::setup(const vks::Context& context,
 
     // Pipeline layout
     {
+        auto& layout = renderer._camera.descriptorSetLayout;
         vk::PushConstantRange pushConstantRange{ vk::ShaderStageFlagBits::eVertex, 0, sizeof(SkyGrids::PushContstants) };
-        pipelineLayout = context.device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, layouts.size(), layouts.data(), 1, &pushConstantRange });
+        pipelineLayout = context.device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, 1, &layout, 1, &pushConstantRange });
     }
 
     {
         vks::pipelines::GraphicsPipelineBuilder builder{ context.device, context.pipelineCache };
         builder.layout = pipelineLayout;
-        builder.renderPass = renderPass;
+        builder.renderPass = renderer._renderPass;
         builder.inputAssemblyState.primitiveRestartEnable = VK_TRUE;
         builder.inputAssemblyState.topology = vk::PrimitiveTopology::eLineStrip;
         builder.vertexInputState.bindingDescriptions = { { 0, sizeof(glm::vec3), vk::VertexInputRate::eVertex } };
@@ -637,6 +639,7 @@ void VulkanRenderer::SkyGrids::setup(const vks::Context& context,
 void VulkanRenderer::SkyGrids::render(const vk::CommandBuffer& commandBuffer,
                                       const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets,
                                       uint32_t renderFlags) {
+    vks::debug::marker::beginRegion(commandBuffer, "skyGrids");
     // Submit via push constant (rather than a UBO)
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
     if (!descriptorSets.empty()) {
@@ -666,6 +669,7 @@ void VulkanRenderer::SkyGrids::render(const vk::CommandBuffer& commandBuffer,
         commandBuffer.pushConstants<SkyGrids::PushContstants>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, pushConstants);
         commandBuffer.drawIndexed(indexCount, 1, 0, 0, 0);
     }
+    vks::debug::marker::endRegion(commandBuffer);
 }
 
 void VulkanRenderer::renderSkyGrids(const Observer& observer) {
@@ -802,18 +806,98 @@ void VulkanRenderer::renderStars(const Observer& observer, const StarDatabase& s
     };
 
     updateStarVertices(starRenderer.starVertexData, _stars.starVertexCount, _stars.starVertices);
-    //updateStarVertices(starRenderer.glareVertexData, _stars.glareVertexCount, _stars.glareVertices);
+    updateStarVertices(starRenderer.glareVertexData, _stars.glareVertexCount, _stars.glareVertices);
     _stars.render(_frame.commandBuffer, _camera.descriptorSet);
 }
 
-void VulkanRenderer::Stars::setup(const vks::Context& context, const vk::RenderPass& renderPass, const vk::ArrayProxy<const vk::DescriptorSetLayout>& layouts) {
+static void BuildGaussianDiscMipLevel(gli::texture2d& texture, uint32_t size, uint32_t mipLevel, float fwhm, float power) {
+    float sigma = fwhm / 2.3548f;
+    float isig2 = 1.0f / (2.0f * sigma * sigma);
+    float s = 1.0f / (sigma * (float)sqrt(2.0 * PI));
+
+    for (unsigned int i = 0; i < size; i++) {
+        float y = (float)i - (float)size / 2.0f + 0.5f;
+        for (unsigned int j = 0; j < size; j++) {
+            float x = (float)j - (float)size / 2.0f + 0.5f;
+            float r2 = x * x + y * y;
+            float f = s * (float)exp(-r2 * isig2) * power;
+            texture.store({ j, i }, mipLevel, (unsigned char)(255.99f * std::min(f, 1.0f)));
+        }
+    }
+}
+
+static void BuildGlareMipLevel(gli::texture2d& texture, uint32_t size, uint16_t mipLevel, float scale, float base) {
+    for (uint32_t i = 0; i < size; i++) {
+        float y = (float)i - (float)size / 2.0f + 0.5f;
+        for (unsigned int j = 0; j < size; j++) {
+            float x = (float)j - (float)size / 2.0f + 0.5f;
+            float r = (float)sqrt(x * x + y * y);
+            float f = (float)pow(base, r * scale);
+            texture.store({ j, i }, mipLevel, (unsigned char)(255.99f * std::min(f, 1.0f)));
+        }
+    }
+}
+
+static std::shared_ptr<gli::texture2d> BuildGaussianDiscTexture(unsigned int log2size) {
+    unsigned int size = 1 << log2size;
+    auto result = std::make_shared<gli::texture2d>(gli::format::FORMAT_L8_UNORM_PACK8, gli::texture2d::extent_type{ size, size }, log2size + 1);
+    for (unsigned int mipLevel = 0; mipLevel <= log2size; mipLevel++) {
+        float fwhm = (float)pow(2.0f, (float)(log2size - mipLevel)) * 0.3f;
+        uint32_t mipSize = size >> mipLevel;
+        BuildGaussianDiscMipLevel(*result, mipSize, mipLevel, fwhm, (float)pow(2.0f, (float)(log2size - mipLevel)));
+    }
+    return result;
+}
+
+static std::shared_ptr<gli::texture2d> BuildGaussianGlareTexture(unsigned int log2size) {
+    unsigned int size = 1 << log2size;
+    auto result = std::make_shared<gli::texture2d>(gli::format::FORMAT_L8_UNORM_PACK8, gli::texture2d::extent_type{ size, size }, log2size + 1);
+    for (unsigned int mipLevel = 0; mipLevel <= log2size; mipLevel++) {
+        uint32_t mipSize = size >> mipLevel;
+        BuildGlareMipLevel(*result, mipSize, mipLevel, 25.0f / (float)pow(2.0f, (float)(log2size - mipLevel)), 0.66f);
+    }
+    return result;
+}
+
+void VulkanRenderer::Stars::setup(VulkanRenderer& renderer) {
     // Pipeline layout
-    { pipelineLayout = context.device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, layouts.size(), layouts.data(), 0, nullptr }); }
+    const auto& context = renderer._context;
 
     {
+        gaussianDiscTex.loadFromFile(context, getAssetPath() + "textures/ktx/gaussianDisc.ktx", vk::Format::eR8Unorm);
+        gaussianGlareTex.loadFromFile(context, getAssetPath() + "textures/ktx/gaussianGlare.ktx", vk::Format::eR8Unorm);
+    }
+
+    {
+        std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+            vk::DescriptorSetLayoutBinding{ 0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment },
+        };
+        descriptorSetLayout = context.device.createDescriptorSetLayout({ {}, (uint32_t)setLayoutBindings.size(), setLayoutBindings.data() });
+
+        // Example uses one ubo and one image sampler
+        std::vector<vk::DescriptorPoolSize> poolSizes = {
+            vk::DescriptorPoolSize{ vk::DescriptorType::eCombinedImageSampler, 1 },
+        };
+        descriptorPool = context.device.createDescriptorPool({ {}, 2, (uint32_t)poolSizes.size(), poolSizes.data() });
+        starDescriptorSet = context.device.allocateDescriptorSets({ descriptorPool, 1, &descriptorSetLayout })[0];
+        glareDescriptorSet = context.device.allocateDescriptorSets({ descriptorPool, 1, &descriptorSetLayout })[0];
+        // vk::Image descriptor for the color map texture
+        vk::DescriptorImageInfo glareTexDescriptor{ gaussianGlareTex.sampler, gaussianGlareTex.view, vk::ImageLayout::eGeneral };
+        vk::DescriptorImageInfo discTexDescriptor{ gaussianDiscTex.sampler, gaussianDiscTex.view, vk::ImageLayout::eGeneral };
+        context.device.updateDescriptorSets(
+            {
+                { starDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &discTexDescriptor },
+                { glareDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &glareTexDescriptor },
+            },
+            nullptr);
+    }
+
+    {
+        vk::ArrayProxy<const vk::DescriptorSetLayout> layouts{ renderer._camera.descriptorSetLayout, descriptorSetLayout };
+        pipelineLayout = context.device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, layouts.size(), layouts.data(), 0, nullptr });
         vks::pipelines::GraphicsPipelineBuilder builder{ context.device, context.pipelineCache };
         builder.layout = pipelineLayout;
-        builder.renderPass = renderPass;
+        builder.renderPass = renderer._renderPass;
         builder.inputAssemblyState.topology = vk::PrimitiveTopology::ePointList;
         builder.vertexInputState.bindingDescriptions = { { 0, sizeof(PointStarRenderer::StarVertex), vk::VertexInputRate::eVertex } };
         builder.vertexInputState.attributeDescriptions = {
@@ -824,6 +908,16 @@ void VulkanRenderer::Stars::setup(const vks::Context& context, const vk::RenderP
             vk::DynamicState::eViewport,
             vk::DynamicState::eScissor,
         };
+
+        auto& blendAttachmentState = builder.colorBlendState.blendAttachmentStates[0];
+        // Additive blending
+        blendAttachmentState.blendEnable = VK_TRUE;
+        blendAttachmentState.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+        blendAttachmentState.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blendAttachmentState.colorBlendOp = vk::BlendOp::eAdd;
+        blendAttachmentState.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
+        blendAttachmentState.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blendAttachmentState.alphaBlendOp = vk::BlendOp::eAdd;
         builder.loadShader(getAssetPath() + "shaders/stars.vert.spv", vk::ShaderStageFlagBits::eVertex);
         builder.loadShader(getAssetPath() + "shaders/stars.frag.spv", vk::ShaderStageFlagBits::eFragment);
         starPipeline = builder.create();
@@ -831,34 +925,21 @@ void VulkanRenderer::Stars::setup(const vks::Context& context, const vk::RenderP
 }
 
 void VulkanRenderer::Stars::render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets) {
-    if (starVertexCount != 0) {
+    if (starVertexCount != 0 || glareVertexCount != 0) {
+        vks::debug::marker::beginRegion(commandBuffer, "stars");
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, starPipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSets, nullptr);
-        commandBuffer.bindVertexBuffers(0, starVertices.buffer, { 0 });
-        commandBuffer.draw(starVertexCount, 1, 0, 0);
+        if (starVertexCount != 0) {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, starDescriptorSet, nullptr);
+            commandBuffer.bindVertexBuffers(0, starVertices.buffer, { 0 });
+            commandBuffer.draw(starVertexCount, 1, 0, 0);
+        }
+
+        if (glareVertexCount != 0) {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, glareDescriptorSet, nullptr);
+            commandBuffer.bindVertexBuffers(0, glareVertices.buffer, { 0 });
+            commandBuffer.draw(glareVertexCount, 1, 0, 0);
+        }
+        vks::debug::marker::endRegion(commandBuffer);
     }
-
-    if (glareVertexCount != 0) {
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, glarePipeline);
-        commandBuffer.bindVertexBuffers(0, glareVertices.buffer, { 0 });
-        commandBuffer.draw(glareVertexCount, 1, 0, 0);
-    }
-
-    /*
-    glEnable(GL_TEXTURE_2D);
-    gaussianDiscTex->bind();
-    starRenderer.starVertexBuffer->setTexture(gaussianDiscTex);
-    starRenderer.glareVertexBuffer->setTexture(gaussianGlareTex);
-
-    starRenderer.glareVertexBuffer->startSprites(*context);
-    if (starStyle == PointStars)
-        starRenderer.starVertexBuffer->startPoints(*context);
-    else
-        starRenderer.starVertexBuffer->startSprites(*context);
-
-    starRenderer.starVertexBuffer->render();
-    starRenderer.glareVertexBuffer->render();
-    starRenderer.starVertexBuffer->finish();
-    starRenderer.glareVertexBuffer->finish();
-*/
 }
