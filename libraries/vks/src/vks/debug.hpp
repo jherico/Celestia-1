@@ -56,10 +56,10 @@ void setObjectName(const vk::Device& device, uint64_t object, vk::DebugReportObj
 void setObjectTag(const vk::Device& device, uint64_t object, vk::DebugReportObjectTypeEXT objectType, uint64_t name, size_t tagSize, const void* tag);
 
 // Start a new debug marker region
-void beginRegion(const vk::CommandBuffer& cmdbuffer, const std::string& pMarkerName, const glm::vec4& color);
+void beginRegion(const vk::CommandBuffer& cmdbuffer, const std::string& pMarkerName, const glm::vec4& color = glm::vec4(1.0f));
 
 // Insert a new debug marker into the command buffer
-void insert(const vk::CommandBuffer& cmdbuffer, const std::string& markerName, const glm::vec4& color);
+void insert(const vk::CommandBuffer& cmdbuffer, const std::string& markerName, const glm::vec4& color = glm::vec4(1.0f));
 
 // End the current debug marker region
 void endRegion(const vk::CommandBuffer& cmdBuffer);

@@ -24,18 +24,49 @@ using namespace Eigen;
 float fov = TAUf / 6.0f;
 float aspectRatio = 1.0f;
 
+glm::vec3 toGlm(const Eigen::Vector3f& v) {
+    return glm::vec3(v.x(), v.y(), v.z());
+}
+
+template <typename PREC>
+glm::tquat<PREC, glm::highp> toGlm(const Eigen::Quaternion<PREC>& q) {
+    return glm::tquat<PREC, glm::highp>(q.w(), q.x(), q.y(), q.z());
+}
+
+template <typename PREC>
+glm::mat4 toMat4(const Eigen::Quaternion<PREC>& q) {
+    return glm::mat4_cast(glm::quat(toGlm<float>(q.cast<float>())));
+}
+
+glm::vec4 toGlm(const Color& color) {
+    return glm::vec4(color.red(), color.green(), color.blue(), color.alpha());
+}
+
 static Vector3d toStandardCoords(const Vector3d& v) {
     return Vector3d(v.x(), -v.z(), v.y());
 }
 
-void QResizableWindow::resizeEvent(QResizeEvent* event) {
-    emit resizing();
-    QWindow::resizeEvent(event);
+StarOctree::Frustum computeFrustum(const Eigen::Vector3f& position, const Eigen::Quaternionf& orientation, float fovY, float aspectRatio) {
+    // Compute the bounding planes of an infinite view frustum
+    StarOctree::Frustum frustumPlanes;
+    Vector3f planeNormals[5];
+    Eigen::Matrix3f rot = orientation.toRotationMatrix();
+    float h = (float)tan(fovY / 2);
+    float w = h * aspectRatio;
+    planeNormals[0] = Vector3f(0.0f, 1.0f, -h);
+    planeNormals[1] = Vector3f(0.0f, -1.0f, -h);
+    planeNormals[2] = Vector3f(1.0f, 0.0f, -w);
+    planeNormals[3] = Vector3f(-1.0f, 0.0f, -w);
+    planeNormals[4] = Vector3f(0.0f, 0.0f, -1.0f);
+    for (int i = 0; i < 5; i++) {
+        planeNormals[i] = rot.transpose() * planeNormals[i].normalized();
+        frustumPlanes[i] = Hyperplane<float, 3>(planeNormals[i], position);
+    }
+    return frustumPlanes;
 }
 
-VulkanRenderer::VulkanRenderer(QResizableWindow* window)
+VulkanRenderer::VulkanRenderer(QWindow* window)
     : _window(window) {
-    QObject::connect(window, &QResizableWindow::resizing, this, &VulkanRenderer::onWindowResized);
 }
 
 void VulkanRenderer::onWindowResized() {
@@ -263,6 +294,19 @@ static Vector3d astrocentricPosition(const UniversalCoord& pos, const Star& star
     return pos.offsetFromKm(star.getPosition(t));
 }
 
+static const float RenderDistance = 50.0f;
+// Maximum size of a solar system in light years. Features beyond this distance
+// will not necessarily be rendered correctly. This limit is used for
+// visibility culling of solar systems.
+static const float MaxSolarSystemSize = 1.0f;
+static const float MaxScaledDiscStarSize = 8.0f;
+static const float GlareOpacity = 0.65f;
+static const float BaseStarDiscSize = 5.0f;
+
+//
+// Star rendering
+//
+
 class PointStarRenderer : public ObjectRenderer<Star, float> {
 public:
     PointStarRenderer(const Observer& observer, const StarDatabase& starDB)
@@ -275,7 +319,7 @@ public:
     Vector3d obsPos;
     //std::vector<RenderListEntry> renderList;
     const StarDatabase& starDB;
-    bool useScaledDiscs{ false };
+    bool useScaledDiscs{ true };
     float maxDiscSize{ 1 };
     std::vector<size_t> indices;
 
@@ -294,7 +338,7 @@ public:
 protected:
     static void addStarVertex(StarVertices& outVertices, const Vector3f& relativePosition, const Color& color, float size) {
         outVertices.push_back(StarVertex{
-            glm::vec4(relativePosition.x(), relativePosition.z(), relativePosition.y(), size),
+            glm::vec4(relativePosition.x(), relativePosition.y(), relativePosition.z(), size),
             glm::vec4(color.red(), color.green(), color.blue(), color.alpha()),
         });
     }
@@ -302,15 +346,6 @@ protected:
     void addStarVertex(const Vector3f& relativePosition, const Color& color, float size) { addStarVertex(starVertexData, relativePosition, color, size); }
     void addGlareVertex(const Vector3f& relativePosition, const Color& color, float size) { addStarVertex(glareVertexData, relativePosition, color, size); }
 };
-
-static const float RenderDistance = 50.0f;
-// Maximum size of a solar system in light years. Features beyond this distance
-// will not necessarily be rendered correctly. This limit is used for
-// visibility culling of solar systems.
-static const float MaxSolarSystemSize = 1.0f;
-static const float MaxScaledDiscStarSize = 8.0f;
-static const float GlareOpacity = 0.65f;
-static const float BaseStarDiscSize = 5.0f;
 
 void PointStarRenderer::process(const StarPtr& starPtr, float distance, float appMag) {
     nProcessed++;
@@ -425,123 +460,197 @@ void PointStarRenderer::process(const StarPtr& starPtr, float distance, float ap
     }
 }
 
-void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& universePtr, float faintestVisible, const Selection& sel) {
-    if (_resizing || !_ready) {
-        return;
-    }
-    const auto& observer = *observerPtr;
-    const auto& universe = *universePtr;
-    preRender(observer, universe, faintestVisible, sel);
+#if 0
+static void BuildGaussianDiscMipLevel(gli::texture2d& texture, uint32_t size, uint32_t mipLevel, float fwhm, float power) {
+    float sigma = fwhm / 2.3548f;
+    float isig2 = 1.0f / (2.0f * sigma * sigma);
+    float s = 1.0f / (sigma * (float)sqrt(2.0 * PI));
 
-    _camera.matrices.projection = glm::perspective(fov, aspectRatio, 0.1f, 10000.f);
-    auto msecs = QDateTime::currentMSecsSinceEpoch() % LOOP_INTERVAL_MS;
-    float interval = (float)msecs / (float)LOOP_INTERVAL_MS;
-
-    _camera.matrices.view = glm::rotate(glm::mat4(), (float)interval * TAUf, glm::vec3{ 1, 0, 0 });
-    _camera.ubo.copy(_camera.matrices);
-
-    uint32_t currentBuffer = _swapchain.acquireNextImage(_semaphores.acquireComplete).value;
-
-    if (_frame.commandBuffer) {
-        _context.trash(_frame.commandBuffer);
-    }
-
-    static const vk::ClearValue CLEAR_COLOR{ vks::util::clearColor({ 0, 0, 0, 1 }) };
-    _frame.commandBuffer = _context.allocateCommandBuffers(1)[0];
-    _frame.framebuffer = _framebuffers[currentBuffer];
-    _frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
-    _frame.commandBuffer.beginRenderPass({ _renderPass, _frame.framebuffer, { {}, _extent }, 1, &CLEAR_COLOR }, vk::SubpassContents::eInline);
-
-    _frame.commandBuffer.setViewport(0, vks::util::viewport(_extent));
-    _frame.commandBuffer.setScissor(0, vks::util::rect2D(_extent));
-
-    // Render sky grids first--these will always be in the background
-    renderSkyGrids(observer);
-
-    // Render deep sky objects
-    if ((renderFlags & (ShowGalaxies | ShowGlobulars | ShowNebulae | ShowOpenClusters)) != 0 && universe.getDSOCatalog()) {
-        renderDeepSkyObjects(universe, observer, faintestMag);
-    }
-
-    // Render stars
-    if ((renderFlags & ShowStars) != 0 && universe.getStarCatalog() != NULL) {
-        renderStars(observer, *universe.getStarCatalog(), faintestMag);
-    }
-
-    // Render asterisms
-    if ((renderFlags & ShowDiagrams) != 0 && !universe.getAsterisms().empty()) {
-        /* We'll linearly fade the lines as a function of the observer's distance to the origin of coordinates: */
-        //float opacity = 1.0f;
-        //float dist = observerPosLY.norm() * 1.6e4f;
-        //if (dist > MaxAsterismLinesConstDist) {
-        //    opacity = clamp((MaxAsterismLinesConstDist - dist) / (MaxAsterismLinesDist - MaxAsterismLinesConstDist) + 1);
-        //}
-
-        for (const auto& ast : universe.getAsterisms()) {
-            if (ast->getActive()) {
-                if (ast->isColorOverridden()) {
-                } else {
-                }
-
-                for (int i = 0; i < ast->getChainCount(); i++) {
-                    const Asterism::Chain& chain = ast->getChain(i);
-                    //glBegin(GL_LINE_STRIP);
-                    //for (Asterism::Chain::const_iterator iter = chain.begin(); iter != chain.end(); iter++)
-                    //    glVertex3fv(iter->data());
-                    //glEnd();
-                }
-            }
+    for (unsigned int i = 0; i < size; i++) {
+        float y = (float)i - (float)size / 2.0f + 0.5f;
+        for (unsigned int j = 0; j < size; j++) {
+            float x = (float)j - (float)size / 2.0f + 0.5f;
+            float r2 = x * x + y * y;
+            float f = s * (float)exp(-r2 * isig2) * power;
+            texture.store({ j, i }, mipLevel, (unsigned char)(255.99f * std::min(f, 1.0f)));
         }
     }
+}
 
-    if ((renderFlags & ShowBoundaries) != 0) {
-        /* We'll linearly fade the boundaries as a function of the observer's distance to the origin of coordinates: */
-        //float opacity = 1.0f;
-        //float dist = observerPosLY.norm() * 1.6e4f;
-        //if (dist > MaxAsterismLabelsConstDist) {
-        //    opacity = clamp((MaxAsterismLabelsConstDist - dist) / (MaxAsterismLabelsDist - MaxAsterismLabelsConstDist) + 1);
-        //}
-        //if (universe.getBoundaries() != NULL)
-        //    universe.getBoundaries()->render();
+static void BuildGlareMipLevel(gli::texture2d& texture, uint32_t size, uint16_t mipLevel, float scale, float base) {
+    for (uint32_t i = 0; i < size; i++) {
+        float y = (float)i - (float)size / 2.0f + 0.5f;
+        for (unsigned int j = 0; j < size; j++) {
+            float x = (float)j - (float)size / 2.0f + 0.5f;
+            float r = (float)sqrt(x * x + y * y);
+            float f = (float)pow(base, r * scale);
+            texture.store({ j, i }, mipLevel, (unsigned char)(255.99f * std::min(f, 1.0f)));
+        }
+    }
+}
+
+static std::shared_ptr<gli::texture2d> BuildGaussianDiscTexture(unsigned int log2size) {
+    unsigned int size = 1 << log2size;
+    auto result = std::make_shared<gli::texture2d>(gli::format::FORMAT_L8_UNORM_PACK8, gli::texture2d::extent_type{ size, size }, log2size + 1);
+    for (unsigned int mipLevel = 0; mipLevel <= log2size; mipLevel++) {
+        float fwhm = (float)pow(2.0f, (float)(log2size - mipLevel)) * 0.3f;
+        uint32_t mipSize = size >> mipLevel;
+        BuildGaussianDiscMipLevel(*result, mipSize, mipLevel, fwhm, (float)pow(2.0f, (float)(log2size - mipLevel)));
+    }
+    return result;
+}
+
+static std::shared_ptr<gli::texture2d> BuildGaussianGlareTexture(unsigned int log2size) {
+    unsigned int size = 1 << log2size;
+    auto result = std::make_shared<gli::texture2d>(gli::format::FORMAT_L8_UNORM_PACK8, gli::texture2d::extent_type{ size, size }, log2size + 1);
+    for (unsigned int mipLevel = 0; mipLevel <= log2size; mipLevel++) {
+        uint32_t mipSize = size >> mipLevel;
+        BuildGlareMipLevel(*result, mipSize, mipLevel, 25.0f / (float)pow(2.0f, (float)(log2size - mipLevel)), 0.66f);
+    }
+    return result;
+}
+#endif
+
+void VulkanRenderer::Stars::setup(VulkanRenderer& renderer) {
+    // Pipeline layout
+    const auto& context = renderer._context;
+
+    gaussianDiscTex.loadFromFile(context, getAssetPath() + "textures/ktx/gaussianDisc.ktx", vk::Format::eR8Unorm);
+    gaussianGlareTex.loadFromFile(context, getAssetPath() + "textures/ktx/gaussianGlare.ktx", vk::Format::eR8Unorm);
+
+    {
+        std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
+            vk::DescriptorSetLayoutBinding{ 0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment },
+        };
+        descriptorSetLayout = context.device.createDescriptorSetLayout({ {}, (uint32_t)setLayoutBindings.size(), setLayoutBindings.data() });
+
+        // Example uses one ubo and one image sampler
+        std::vector<vk::DescriptorPoolSize> poolSizes = {
+            vk::DescriptorPoolSize{ vk::DescriptorType::eCombinedImageSampler, 1 },
+        };
+        descriptorPool = context.device.createDescriptorPool({ {}, 2, (uint32_t)poolSizes.size(), poolSizes.data() });
+        starDescriptorSet = context.device.allocateDescriptorSets({ descriptorPool, 1, &descriptorSetLayout })[0];
+        glareDescriptorSet = context.device.allocateDescriptorSets({ descriptorPool, 1, &descriptorSetLayout })[0];
+        // vk::Image descriptor for the color map texture
+        vk::DescriptorImageInfo glareTexDescriptor{ gaussianGlareTex.sampler, gaussianGlareTex.view, vk::ImageLayout::eGeneral };
+        vk::DescriptorImageInfo discTexDescriptor{ gaussianDiscTex.sampler, gaussianDiscTex.view, vk::ImageLayout::eGeneral };
+        context.device.updateDescriptorSets(
+            {
+                { starDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &discTexDescriptor },
+                { glareDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &glareTexDescriptor },
+            },
+            nullptr);
     }
 
-    // Render star and deep sky object labels
-    //renderBackgroundAnnotations(FontNormal);
-    // Render constellations labels
-    //if ((labelMode & ConstellationLabels) != 0 && universe.getAsterisms() != NULL) {
-    //    labelConstellations(*universe.getAsterisms(), observer);
-    //    renderBackgroundAnnotations(FontLarge);
+    {
+        vk::ArrayProxy<const vk::DescriptorSetLayout> layouts{ renderer._camera.descriptorSetLayout, descriptorSetLayout };
+        pipelineLayout = context.device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, layouts.size(), layouts.data(), 0, nullptr });
+        vks::pipelines::GraphicsPipelineBuilder builder{ context.device, context.pipelineCache };
+        builder.layout = pipelineLayout;
+        builder.renderPass = renderer._renderPass;
+        builder.inputAssemblyState.topology = vk::PrimitiveTopology::ePointList;
+        builder.vertexInputState.bindingDescriptions = { { 0, sizeof(PointStarRenderer::StarVertex), vk::VertexInputRate::eVertex } };
+        builder.vertexInputState.attributeDescriptions = {
+            { 0, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(PointStarRenderer::StarVertex, positionAndSize) },
+            { 1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(PointStarRenderer::StarVertex, color) },
+        };
+        builder.dynamicState.dynamicStateEnables = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor,
+        };
+
+        auto& blendAttachmentState = builder.colorBlendState.blendAttachmentStates[0];
+        // Additive blending
+        blendAttachmentState.blendEnable = VK_TRUE;
+        blendAttachmentState.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+        blendAttachmentState.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blendAttachmentState.colorBlendOp = vk::BlendOp::eAdd;
+        blendAttachmentState.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
+        blendAttachmentState.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blendAttachmentState.alphaBlendOp = vk::BlendOp::eAdd;
+        builder.loadShader(getAssetPath() + "shaders/stars.vert.spv", vk::ShaderStageFlagBits::eVertex);
+        builder.loadShader(getAssetPath() + "shaders/stars.frag.spv", vk::ShaderStageFlagBits::eFragment);
+        starPipeline = builder.create();
+    }
+}
+
+void VulkanRenderer::Stars::render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets) {
+    if (starVertexCount != 0 || glareVertexCount != 0) {
+        vks::debug::marker::beginRegion(commandBuffer, "stars");
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, starPipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSets, nullptr);
+        if (starVertexCount != 0) {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, starDescriptorSet, nullptr);
+            commandBuffer.bindVertexBuffers(0, starVertices.buffer, { 0 });
+            commandBuffer.draw(starVertexCount, 1, 0, 0);
+        }
+
+        if (glareVertexCount != 0) {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, glareDescriptorSet, nullptr);
+            commandBuffer.bindVertexBuffers(0, glareVertices.buffer, { 0 });
+            commandBuffer.draw(glareVertexCount, 1, 0, 0);
+        }
+        vks::debug::marker::endRegion(commandBuffer);
+    }
+}
+
+void VulkanRenderer::renderStars(const Observer& observer, const StarDatabase& starDB, float faintestMagNight) {
+    //_context.deviceFeatures.largePoints
+    Vector3d obsPos = observer.getPosition().toLy();
+
+    PointStarRenderer starRenderer(observer, starDB);
+    starRenderer.obsPos = obsPos;
+    starRenderer.viewNormal = observer.getOrientationf().conjugate() * -Vector3f::UnitZ();
+
+    starRenderer.pixelSize = pixelSize;
+    starRenderer.brightnessScale = brightnessScale * corrFac;
+    starRenderer.brightnessBias = brightnessBias;
+    starRenderer.faintestMag = faintestMag;
+    starRenderer.faintestMagNight = faintestMagNight;
+    starRenderer.saturationMag = saturationMag;
+    starRenderer.distanceLimit = distanceLimit;
+    starRenderer.labelMode = labelMode;
+    starRenderer.colorTemp = getStarColorTable();
+
+    // = 1.0 at startup
+    //starRenderer.labelThresholdMag = 1.2f * std::max(1.0f, (faintestMag - 4.0f) * (1.0f - 0.5f * (float)log10(effDistanceToScreen)));
+
+    starRenderer.size = BaseStarDiscSize;
+    //if (starStyle == ScaledDiscStars) {
+    //    starRenderer.useScaledDiscs = true;
+    //    starRenderer.brightnessScale *= 2.0f;
+    //    starRenderer.maxDiscSize = starRenderer.size * MaxScaledDiscStarSize;
+    //} else if (starStyle == FuzzyPointStars) {
+    //    starRenderer.brightnessScale *= 1.0f;
     //}
-    _frame.commandBuffer.endRenderPass();
-    _frame.commandBuffer.end();
+    //starRenderer.colorTemp = colorTemp;
+    auto frustum = computeFrustum(obsPos.cast<float>(), observer.getOrientationf(), fov, aspectRatio);
+    starDB.findVisibleStars(starRenderer, obsPos.cast<float>(), observer.getOrientationf(), frustum, faintestMagNight);
 
-    auto fence = _device.createFence({});
-    _context.submit(_frame.commandBuffer, { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe }, _semaphores.renderComplete, fence);
-    try {
-        _swapchain.queuePresent(_semaphores.renderComplete);
-    } catch (const vk::OutOfDateKHRError&) {
-        _resizing = true;
-        _resizeTimer->start();
-    }
-    _context.emptyDumpster(fence);
-    _device.waitForFences(fence, VK_TRUE, UINT64_MAX);
-    _context.recycle();
+    auto updateStarVertices = [&](const PointStarRenderer::StarVertices& data, uint32_t& vertexCount, vks::Buffer& vertexBuffer) {
+        uint32_t newSize = (uint32_t)data.size();
+        if (newSize > vertexCount) {
+            if (vertexBuffer) {
+                vertexBuffer.unmap();
+                _context.trash(vertexBuffer);
+            }
+            vertexBuffer = _context.createBuffer(vk::BufferUsageFlagBits::eVertexBuffer,
+                                                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                                                 sizeof(PointStarRenderer::StarVertex) * newSize);
+            vertexBuffer.map();
+        }
+        vertexCount = newSize;
+        vertexBuffer.copy(data);
+    };
+
+    updateStarVertices(starRenderer.starVertexData, _stars.starVertexCount, _stars.starVertices);
+    updateStarVertices(starRenderer.glareVertexData, _stars.glareVertexCount, _stars.glareVertices);
+    _stars.render(_frame.commandBuffer, _camera.descriptorSet);
 }
 
-template <typename PREC>
-glm::tquat<PREC, glm::highp> toGlm(const Eigen::Quaternion<PREC>& q) {
-    return glm::tquat<PREC, glm::highp>(q.w(), q.x(), q.y(), q.z());
-}
-
-template <typename PREC>
-glm::mat4 toMat4(const Eigen::Quaternion<PREC>& q) {
-    return glm::mat4_cast(glm::quat(toGlm<double>(q)));
-}
-
-glm::vec4 toGlm(const Color& color) {
-    return glm::vec4(color.red(), color.green(), color.blue(), color.alpha());
-}
-
+//
+// Sky grids rendering
+//
 void VulkanRenderer::SkyGrids::setup(VulkanRenderer& renderer) {
     const auto& context = renderer._context;
     {
@@ -555,7 +664,7 @@ void VulkanRenderer::SkyGrids::setup(VulkanRenderer& renderer) {
 
         // Meridians
         {
-            static const uint32_t MERIDIAN_SEGMENTS = 128;
+            static const uint32_t MERIDIAN_SEGMENTS = 64;
             static const float AZIMUTH_INTERVAL = TAUf / MERIDIANS;
             static const float ELEVATION_INTERVAL = ELEVATION_RANGE / MERIDIAN_SEGMENTS;
 
@@ -583,7 +692,7 @@ void VulkanRenderer::SkyGrids::setup(VulkanRenderer& renderer) {
 
         // Parallels
         {
-            static const uint32_t PARALLEL_SEGMENTS = 128;
+            static const uint32_t PARALLEL_SEGMENTS = 64;
             static const float AZIMUTH_INTERVAL = TAUf / PARALLEL_SEGMENTS;
             static const float ELEVATION_INTERVAL = ELEVATION_RANGE / PARALLELS;
             for (uint32_t i = 0; i <= PARALLELS; ++i) {
@@ -630,6 +739,15 @@ void VulkanRenderer::SkyGrids::setup(VulkanRenderer& renderer) {
             vk::DynamicState::eScissor,
             vk::DynamicState::eLineWidth,
         };
+        auto& blendAttachmentState = builder.colorBlendState.blendAttachmentStates[0];
+        // Additive blending
+        blendAttachmentState.blendEnable = VK_TRUE;
+        blendAttachmentState.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+        blendAttachmentState.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blendAttachmentState.colorBlendOp = vk::BlendOp::eAdd;
+        blendAttachmentState.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
+        blendAttachmentState.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blendAttachmentState.alphaBlendOp = vk::BlendOp::eAdd;
         builder.loadShader(getAssetPath() + "shaders/skygrid.vert.spv", vk::ShaderStageFlagBits::eVertex);
         builder.loadShader(getAssetPath() + "shaders/skygrid.frag.spv", vk::ShaderStageFlagBits::eFragment);
         pipeline = builder.create();
@@ -647,7 +765,7 @@ void VulkanRenderer::SkyGrids::render(const vk::CommandBuffer& commandBuffer,
     }
     commandBuffer.bindVertexBuffers(0, vertices.buffer, { 0 });
     commandBuffer.bindIndexBuffer(indices.buffer, 0, vk::IndexType::eUint32);
-    commandBuffer.setLineWidth(1.5f);
+    commandBuffer.setLineWidth(1.0f);
 
     if (renderFlags & ShowCelestialSphere) {
         pushConstants.orientation = toMat4(Quaterniond(AngleAxis<double>(astro::J2000Obliquity, Vector3d::UnitX())));
@@ -738,208 +856,104 @@ void VulkanRenderer::renderSkyGrids(const Observer& observer) {
 void VulkanRenderer::renderDeepSkyObjects(const Universe& universe, const Observer& observer, const float faintestMagNight) {
 }
 
-StarOctree::Frustum computeFrustum(const Eigen::Vector3f& position, const Eigen::Quaternionf& orientation, float fovY, float aspectRatio) {
-    // Compute the bounding planes of an infinite view frustum
-    StarOctree::Frustum frustumPlanes;
-    Vector3f planeNormals[5];
-    Eigen::Matrix3f rot = orientation.toRotationMatrix();
-    float h = (float)tan(fovY / 2);
-    float w = h * aspectRatio;
-    planeNormals[0] = Vector3f(0.0f, 1.0f, -h);
-    planeNormals[1] = Vector3f(0.0f, -1.0f, -h);
-    planeNormals[2] = Vector3f(1.0f, 0.0f, -w);
-    planeNormals[3] = Vector3f(-1.0f, 0.0f, -w);
-    planeNormals[4] = Vector3f(0.0f, 0.0f, -1.0f);
-    for (int i = 0; i < 5; i++) {
-        planeNormals[i] = rot.transpose() * planeNormals[i].normalized();
-        frustumPlanes[i] = Hyperplane<float, 3>(planeNormals[i], position);
+void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& universePtr, float faintestVisible, const Selection& sel) {
+    if (_resizing || !_ready) {
+        return;
     }
-    return frustumPlanes;
-}
+    const auto& observer = *observerPtr;
+    const auto& universe = *universePtr;
+    preRender(observer, universe, faintestVisible, sel);
 
-void VulkanRenderer::renderStars(const Observer& observer, const StarDatabase& starDB, float faintestMagNight) {
-    //_context.deviceFeatures.largePoints
-    Vector3d obsPos = observer.getPosition().toLy();
+    _camera.matrices.projection = glm::perspective(fov, aspectRatio, 0.1f, 10000.f);
+    auto msecs = QDateTime::currentMSecsSinceEpoch() % LOOP_INTERVAL_MS;
+    float interval = (float)msecs / (float)LOOP_INTERVAL_MS;
+    _camera.matrices.view = toMat4(observerPtr->getOrientationf());
+    //_camera.matrices.view = glm::rotate(glm::mat4(), (float)interval * TAUf, glm::vec3{ 1, 0, 0 });
+    _camera.ubo.copy(_camera.matrices);
 
-    PointStarRenderer starRenderer(observer, starDB);
-    starRenderer.obsPos = obsPos;
-    starRenderer.viewNormal = observer.getOrientationf().conjugate() * -Vector3f::UnitZ();
-    starRenderer.pixelSize = pixelSize;
-    starRenderer.brightnessScale = brightnessScale * corrFac;
-    starRenderer.brightnessBias = brightnessBias;
-    starRenderer.faintestMag = faintestMag;
-    starRenderer.faintestMagNight = faintestMagNight;
-    starRenderer.saturationMag = saturationMag;
-    starRenderer.distanceLimit = distanceLimit;
-    starRenderer.labelMode = labelMode;
-    starRenderer.colorTemp = getStarColorTable();
+    uint32_t currentBuffer = _swapchain.acquireNextImage(_semaphores.acquireComplete).value;
 
-    // = 1.0 at startup
-    //starRenderer.labelThresholdMag = 1.2f * std::max(1.0f, (faintestMag - 4.0f) * (1.0f - 0.5f * (float)log10(effDistanceToScreen)));
+    if (_frame.commandBuffer) {
+        _context.trash(_frame.commandBuffer);
+    }
 
-    starRenderer.size = BaseStarDiscSize;
-    //if (starStyle == ScaledDiscStars) {
-    //    starRenderer.useScaledDiscs = true;
-    //    starRenderer.brightnessScale *= 2.0f;
-    //    starRenderer.maxDiscSize = starRenderer.size * MaxScaledDiscStarSize;
-    //} else if (starStyle == FuzzyPointStars) {
-    //    starRenderer.brightnessScale *= 1.0f;
-    //}
-    //starRenderer.colorTemp = colorTemp;
-    auto frustum = computeFrustum(obsPos.cast<float>(), observer.getOrientationf(), fov, aspectRatio);
-    starDB.findVisibleStars(starRenderer, obsPos.cast<float>(), observer.getOrientationf(), frustum, faintestMagNight);
+    static const vk::ClearValue CLEAR_COLOR{ vks::util::clearColor({ 0, 0, 0, 1 }) };
+    _frame.commandBuffer = _context.allocateCommandBuffers(1)[0];
+    _frame.framebuffer = _framebuffers[currentBuffer];
+    _frame.commandBuffer.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+    _frame.commandBuffer.beginRenderPass({ _renderPass, _frame.framebuffer, { {}, _extent }, 1, &CLEAR_COLOR }, vk::SubpassContents::eInline);
 
-    auto updateStarVertices = [&](const PointStarRenderer::StarVertices& data, uint32_t& vertexCount, vks::Buffer& vertexBuffer) {
-        uint32_t newSize = (uint32_t)data.size();
-        if (newSize > vertexCount) {
-            if (vertexBuffer) {
-                vertexBuffer.unmap();
-                _context.trash(vertexBuffer);
+    _frame.commandBuffer.setViewport(0, vks::util::viewport(_extent));
+    _frame.commandBuffer.setScissor(0, vks::util::rect2D(_extent));
+
+    // Render sky grids first--these will always be in the background
+    renderSkyGrids(observer);
+
+    // Render deep sky objects
+    if ((renderFlags & (ShowGalaxies | ShowGlobulars | ShowNebulae | ShowOpenClusters)) != 0 && universe.getDSOCatalog()) {
+        renderDeepSkyObjects(universe, observer, faintestMag);
+    }
+
+    // Render stars
+    if ((renderFlags & ShowStars) != 0 && universe.getStarCatalog() != NULL) {
+        renderStars(observer, *universe.getStarCatalog(), faintestMag);
+    }
+
+    // Render asterisms
+    if ((renderFlags & ShowDiagrams) != 0 && !universe.getAsterisms().empty()) {
+        /* We'll linearly fade the lines as a function of the observer's distance to the origin of coordinates: */
+        //float opacity = 1.0f;
+        //float dist = observerPosLY.norm() * 1.6e4f;
+        //if (dist > MaxAsterismLinesConstDist) {
+        //    opacity = clamp((MaxAsterismLinesConstDist - dist) / (MaxAsterismLinesDist - MaxAsterismLinesConstDist) + 1);
+        //}
+
+        for (const auto& ast : universe.getAsterisms()) {
+            if (ast->getActive()) {
+                if (ast->isColorOverridden()) {
+                } else {
+                }
+
+                for (int i = 0; i < ast->getChainCount(); i++) {
+                    const Asterism::Chain& chain = ast->getChain(i);
+                    //glBegin(GL_LINE_STRIP);
+                    //for (Asterism::Chain::const_iterator iter = chain.begin(); iter != chain.end(); iter++)
+                    //    glVertex3fv(iter->data());
+                    //glEnd();
+                }
             }
-            vertexBuffer = _context.createBuffer(vk::BufferUsageFlagBits::eVertexBuffer,
-                                                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                                                 sizeof(PointStarRenderer::StarVertex) * newSize);
-            vertexBuffer.map();
-        }
-        vertexCount = newSize;
-        vertexBuffer.copy(data);
-    };
-
-    updateStarVertices(starRenderer.starVertexData, _stars.starVertexCount, _stars.starVertices);
-    updateStarVertices(starRenderer.glareVertexData, _stars.glareVertexCount, _stars.glareVertices);
-    _stars.render(_frame.commandBuffer, _camera.descriptorSet);
-}
-
-static void BuildGaussianDiscMipLevel(gli::texture2d& texture, uint32_t size, uint32_t mipLevel, float fwhm, float power) {
-    float sigma = fwhm / 2.3548f;
-    float isig2 = 1.0f / (2.0f * sigma * sigma);
-    float s = 1.0f / (sigma * (float)sqrt(2.0 * PI));
-
-    for (unsigned int i = 0; i < size; i++) {
-        float y = (float)i - (float)size / 2.0f + 0.5f;
-        for (unsigned int j = 0; j < size; j++) {
-            float x = (float)j - (float)size / 2.0f + 0.5f;
-            float r2 = x * x + y * y;
-            float f = s * (float)exp(-r2 * isig2) * power;
-            texture.store({ j, i }, mipLevel, (unsigned char)(255.99f * std::min(f, 1.0f)));
         }
     }
-}
 
-static void BuildGlareMipLevel(gli::texture2d& texture, uint32_t size, uint16_t mipLevel, float scale, float base) {
-    for (uint32_t i = 0; i < size; i++) {
-        float y = (float)i - (float)size / 2.0f + 0.5f;
-        for (unsigned int j = 0; j < size; j++) {
-            float x = (float)j - (float)size / 2.0f + 0.5f;
-            float r = (float)sqrt(x * x + y * y);
-            float f = (float)pow(base, r * scale);
-            texture.store({ j, i }, mipLevel, (unsigned char)(255.99f * std::min(f, 1.0f)));
-        }
-    }
-}
-
-static std::shared_ptr<gli::texture2d> BuildGaussianDiscTexture(unsigned int log2size) {
-    unsigned int size = 1 << log2size;
-    auto result = std::make_shared<gli::texture2d>(gli::format::FORMAT_L8_UNORM_PACK8, gli::texture2d::extent_type{ size, size }, log2size + 1);
-    for (unsigned int mipLevel = 0; mipLevel <= log2size; mipLevel++) {
-        float fwhm = (float)pow(2.0f, (float)(log2size - mipLevel)) * 0.3f;
-        uint32_t mipSize = size >> mipLevel;
-        BuildGaussianDiscMipLevel(*result, mipSize, mipLevel, fwhm, (float)pow(2.0f, (float)(log2size - mipLevel)));
-    }
-    return result;
-}
-
-static std::shared_ptr<gli::texture2d> BuildGaussianGlareTexture(unsigned int log2size) {
-    unsigned int size = 1 << log2size;
-    auto result = std::make_shared<gli::texture2d>(gli::format::FORMAT_L8_UNORM_PACK8, gli::texture2d::extent_type{ size, size }, log2size + 1);
-    for (unsigned int mipLevel = 0; mipLevel <= log2size; mipLevel++) {
-        uint32_t mipSize = size >> mipLevel;
-        BuildGlareMipLevel(*result, mipSize, mipLevel, 25.0f / (float)pow(2.0f, (float)(log2size - mipLevel)), 0.66f);
-    }
-    return result;
-}
-
-void VulkanRenderer::Stars::setup(VulkanRenderer& renderer) {
-    // Pipeline layout
-    const auto& context = renderer._context;
-
-    {
-        gaussianDiscTex.loadFromFile(context, getAssetPath() + "textures/ktx/gaussianDisc.ktx", vk::Format::eR8Unorm);
-        gaussianGlareTex.loadFromFile(context, getAssetPath() + "textures/ktx/gaussianGlare.ktx", vk::Format::eR8Unorm);
+    if ((renderFlags & ShowBoundaries) != 0) {
+        /* We'll linearly fade the boundaries as a function of the observer's distance to the origin of coordinates: */
+        //float opacity = 1.0f;
+        //float dist = observerPosLY.norm() * 1.6e4f;
+        //if (dist > MaxAsterismLabelsConstDist) {
+        //    opacity = clamp((MaxAsterismLabelsConstDist - dist) / (MaxAsterismLabelsDist - MaxAsterismLabelsConstDist) + 1);
+        //}
+        //if (universe.getBoundaries() != NULL)
+        //    universe.getBoundaries()->render();
     }
 
-    {
-        std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
-            vk::DescriptorSetLayoutBinding{ 0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment },
-        };
-        descriptorSetLayout = context.device.createDescriptorSetLayout({ {}, (uint32_t)setLayoutBindings.size(), setLayoutBindings.data() });
+    // Render star and deep sky object labels
+    //renderBackgroundAnnotations(FontNormal);
+    // Render constellations labels
+    //if ((labelMode & ConstellationLabels) != 0 && universe.getAsterisms() != NULL) {
+    //    labelConstellations(*universe.getAsterisms(), observer);
+    //    renderBackgroundAnnotations(FontLarge);
+    //}
+    _frame.commandBuffer.endRenderPass();
+    _frame.commandBuffer.end();
 
-        // Example uses one ubo and one image sampler
-        std::vector<vk::DescriptorPoolSize> poolSizes = {
-            vk::DescriptorPoolSize{ vk::DescriptorType::eCombinedImageSampler, 1 },
-        };
-        descriptorPool = context.device.createDescriptorPool({ {}, 2, (uint32_t)poolSizes.size(), poolSizes.data() });
-        starDescriptorSet = context.device.allocateDescriptorSets({ descriptorPool, 1, &descriptorSetLayout })[0];
-        glareDescriptorSet = context.device.allocateDescriptorSets({ descriptorPool, 1, &descriptorSetLayout })[0];
-        // vk::Image descriptor for the color map texture
-        vk::DescriptorImageInfo glareTexDescriptor{ gaussianGlareTex.sampler, gaussianGlareTex.view, vk::ImageLayout::eGeneral };
-        vk::DescriptorImageInfo discTexDescriptor{ gaussianDiscTex.sampler, gaussianDiscTex.view, vk::ImageLayout::eGeneral };
-        context.device.updateDescriptorSets(
-            {
-                { starDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &discTexDescriptor },
-                { glareDescriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &glareTexDescriptor },
-            },
-            nullptr);
+    auto fence = _device.createFence({});
+    _context.submit(_frame.commandBuffer, { _semaphores.acquireComplete, vk::PipelineStageFlagBits::eBottomOfPipe }, _semaphores.renderComplete, fence);
+    try {
+        _swapchain.queuePresent(_semaphores.renderComplete);
+    } catch (const vk::OutOfDateKHRError&) {
+        _resizing = true;
+        _resizeTimer->start();
     }
-
-    {
-        vk::ArrayProxy<const vk::DescriptorSetLayout> layouts{ renderer._camera.descriptorSetLayout, descriptorSetLayout };
-        pipelineLayout = context.device.createPipelineLayout(vk::PipelineLayoutCreateInfo{ {}, layouts.size(), layouts.data(), 0, nullptr });
-        vks::pipelines::GraphicsPipelineBuilder builder{ context.device, context.pipelineCache };
-        builder.layout = pipelineLayout;
-        builder.renderPass = renderer._renderPass;
-        builder.inputAssemblyState.topology = vk::PrimitiveTopology::ePointList;
-        builder.vertexInputState.bindingDescriptions = { { 0, sizeof(PointStarRenderer::StarVertex), vk::VertexInputRate::eVertex } };
-        builder.vertexInputState.attributeDescriptions = {
-            { 0, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(PointStarRenderer::StarVertex, positionAndSize) },
-            { 1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(PointStarRenderer::StarVertex, color) },
-        };
-        builder.dynamicState.dynamicStateEnables = {
-            vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor,
-        };
-
-        auto& blendAttachmentState = builder.colorBlendState.blendAttachmentStates[0];
-        // Additive blending
-        blendAttachmentState.blendEnable = VK_TRUE;
-        blendAttachmentState.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
-        blendAttachmentState.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-        blendAttachmentState.colorBlendOp = vk::BlendOp::eAdd;
-        blendAttachmentState.srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha;
-        blendAttachmentState.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
-        blendAttachmentState.alphaBlendOp = vk::BlendOp::eAdd;
-        builder.loadShader(getAssetPath() + "shaders/stars.vert.spv", vk::ShaderStageFlagBits::eVertex);
-        builder.loadShader(getAssetPath() + "shaders/stars.frag.spv", vk::ShaderStageFlagBits::eFragment);
-        starPipeline = builder.create();
-    }
-}
-
-void VulkanRenderer::Stars::render(const vk::CommandBuffer& commandBuffer, const vk::ArrayProxy<const vk::DescriptorSet>& descriptorSets) {
-    if (starVertexCount != 0 || glareVertexCount != 0) {
-        vks::debug::marker::beginRegion(commandBuffer, "stars");
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, starPipeline);
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSets, nullptr);
-        if (starVertexCount != 0) {
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, starDescriptorSet, nullptr);
-            commandBuffer.bindVertexBuffers(0, starVertices.buffer, { 0 });
-            commandBuffer.draw(starVertexCount, 1, 0, 0);
-        }
-
-        if (glareVertexCount != 0) {
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, glareDescriptorSet, nullptr);
-            commandBuffer.bindVertexBuffers(0, glareVertices.buffer, { 0 });
-            commandBuffer.draw(glareVertexCount, 1, 0, 0);
-        }
-        vks::debug::marker::endRegion(commandBuffer);
-    }
+    _context.emptyDumpster(fence);
+    _context.recycle();
 }

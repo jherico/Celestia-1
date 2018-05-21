@@ -16,6 +16,8 @@
 
 #include "Logging.h"
 #include "VulkanRenderer.h"
+#include "CelestiaWindow.h"
+
 
 class AppProgressNotifier : public ProgressNotifier {
 public:
@@ -51,14 +53,14 @@ CelestiaVrApplication::CelestiaVrApplication(int argc, char* argv[]) : QGuiAppli
 
     _celestiaCore = std::make_shared<CelestiaCore>();
 
-    _window = new QResizableWindow();
+    _window = new CelestiaWindow();
+    _window->_celestiaCore = _celestiaCore;
     _window->setGeometry(100, 100, 800, 600);
     _window->show();
     _window->setIcon(QIcon(":/icons/celestia.png"));
     _celestiaCore->setRenderer(std::make_shared<VulkanRenderer>(_window));
     QObject::connect(this, &QGuiApplication::aboutToQuit, this, &CelestiaVrApplication::onAboutToQuit);
     _celestiaCore->initSimulation("", {}, std::make_shared<AppProgressNotifier>());
-    qDebug() << "Init";
     // Set up the default time zone name and offset from UTC
     _celestiaCore->start(astro::UTCtoTDB(curtime / 86400.0 + (double)astro::Date(1970, 1, 1)));
     _celestiaCore->setTimeZoneBias(timezoneBias);

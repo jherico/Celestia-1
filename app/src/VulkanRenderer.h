@@ -1,6 +1,5 @@
 #pragma once
 #include <QtCore/QObject>
-#include <QtGui/QWindow>
 
 #include <celengine/render.h>
 #include <vks/context.hpp>
@@ -8,22 +7,14 @@
 #include <vks/texture.hpp>
 
 class QTimer;
-
-class QResizableWindow : public QWindow {
-    Q_OBJECT
-protected:
-    void resizeEvent(QResizeEvent* event) override;
-
-signals:
-    void resizing();
-};
+class QWindow;
 
 class VulkanRenderer : public QObject, public Renderer {
     Q_OBJECT
     using Parent = Renderer;
 
 public:
-    VulkanRenderer(QResizableWindow* window);
+    VulkanRenderer(QWindow* window);
     void initialize() override;
     void render(const ObserverPtr&, const UniversePtr&, float faintestVisible, const Selection& sel) override;
     void shutdown() override;

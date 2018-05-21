@@ -226,7 +226,6 @@ public:
         if (enableValidation) {
             debug::setupDebugging(instance, vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning);
         }
-
     }
 
     void createDevice(const vk::SurfaceKHR& surface = nullptr) {
@@ -341,10 +340,7 @@ public:
         trash<vk::Pipeline>(pipeline, [this](vk::Pipeline pipeline) { device.destroyPipeline(pipeline); });
     }
 
-
-    void trashCommandBuffers(std::vector<vk::CommandBuffer>& cmdBuffers) const {
-        trashCommandBuffers(getCommandPool(), cmdBuffers);
-    }
+    void trashCommandBuffers(std::vector<vk::CommandBuffer>& cmdBuffers) const { trashCommandBuffers(getCommandPool(), cmdBuffers); }
 
     void trashCommandBuffers(const vk::CommandPool& commandPool, std::vector<vk::CommandBuffer>& cmdBuffers) const {
         std::function<void(const std::vector<vk::CommandBuffer>& t)> destructor = [=](const std::vector<vk::CommandBuffer>& cmdBuffers) {
@@ -594,7 +590,8 @@ public:
 
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.requiredFlags = memoryPropertyFlags.operator VkMemoryPropertyFlags();
-        auto vkresult = vmaCreateImage(allocator, reinterpret_cast<const VkImageCreateInfo*>(&imageCreateInfo), &allocationCreateInfo, reinterpret_cast<VkImage*>(&result.image), &result.allocation, &result.info);
+        auto vkresult = vmaCreateImage(allocator, reinterpret_cast<const VkImageCreateInfo*>(&imageCreateInfo), &allocationCreateInfo,
+                                       reinterpret_cast<VkImage*>(&result.image), &result.allocation, &result.info);
         vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
         return result;
     }
@@ -675,7 +672,8 @@ public:
         result.allocator = allocator;
         result.device = device;
         result.size = size;
-        auto vkresult = vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferCreateInfo), &allocationCreateInfo, reinterpret_cast<VkBuffer*>(&result.buffer), &result.allocation, &result.info);
+        auto vkresult = vmaCreateBuffer(allocator, reinterpret_cast<VkBufferCreateInfo*>(&bufferCreateInfo), &allocationCreateInfo,
+                                        reinterpret_cast<VkBuffer*>(&result.buffer), &result.allocation, &result.info);
         result.descriptor.buffer = result.buffer;
         vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
         return result;
@@ -727,7 +725,7 @@ public:
 
     void copyToMemory(const VmaAllocation& memory, const void* data, vk::DeviceSize size, vk::DeviceSize offset = 0) const {
         void* mapped;
-        auto vkresult = vmaMapMemory(allocator, memory, &mapped); 
+        auto vkresult = vmaMapMemory(allocator, memory, &mapped);
         vk::createResultValue(static_cast<vk::Result>(vkresult), __FUNCTION__);
         memcpy(mapped, data, size);
         vmaUnmapMemory(allocator, memory);
@@ -849,7 +847,6 @@ public:
                 const vk::Fence& fence = vk::Fence()) const {
         submit(commandBuffers, wait.first, wait.second, signalSemaphores, fence);
     }
-
 
     vk::Format getSupportedDepthFormat() const {
         // Since all depth formats may be optional, we need to find a suitable depth format to use

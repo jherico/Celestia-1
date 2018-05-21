@@ -329,6 +329,8 @@ public:
     void toggleReferenceMark(const std::string& refMark, Selection sel = {});
     bool referenceMarkEnabled(const std::string& refMark, Selection sel = {}) const;
 
+    void rotateObserver(const Eigen::Quaternionf& rotation);
+
 private:
     bool readStars(const CelestiaConfig&, const ProgressNotifierPtr&);
     void fatalError(const std::string&);

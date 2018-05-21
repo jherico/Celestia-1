@@ -2,14 +2,12 @@
 
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "camera.h"
 
 layout (location = 0) in vec4 inPosAndSize;
 layout (location = 1) in vec4 inColor;
-
-layout (set = 0, binding = 0) uniform Camera {
-    mat4 projection;
-    mat4 view;
-} camera;
 
 layout (location = 0) out vec4 outColor;
 
@@ -19,9 +17,8 @@ out gl_PerVertex {
 };
 
 void main() {
-    outColor = vec4(inColor.rgb, 1.0);
+    outColor = inColor;
     gl_PointSize = inPosAndSize.w;
-    //gl_PointSize = inColor.a * 6.0;
     gl_Position = camera.projection * camera.view * vec4(inPosAndSize.xyz, 1.0);
 }
 
