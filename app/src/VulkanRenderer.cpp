@@ -149,7 +149,7 @@ void VulkanRenderer::initialize() {
 
     // Camera setup
     {
-        _camera.ubo = _context.createUniformBuffer(_camera.matrices);
+        _camera.ubo = _context.createUniformBuffer(_camera.cameras);
         _camera.ubo.setupDescriptor();
 
         std::vector<vk::DescriptorSetLayoutBinding> setLayoutBindings{
@@ -864,12 +864,12 @@ void VulkanRenderer::render(const ObserverPtr& observerPtr, const UniversePtr& u
     const auto& universe = *universePtr;
     preRender(observer, universe, faintestVisible, sel);
 
-    _camera.matrices.projection = glm::perspective(fov, aspectRatio, 0.1f, 10000.f);
+    _camera.cameras[0].projection = glm::perspective(fov, aspectRatio, 0.1f, 10000.f);
     auto msecs = QDateTime::currentMSecsSinceEpoch() % LOOP_INTERVAL_MS;
     float interval = (float)msecs / (float)LOOP_INTERVAL_MS;
-    _camera.matrices.view = toMat4(observerPtr->getOrientationf());
-    //_camera.matrices.view = glm::rotate(glm::mat4(), (float)interval * TAUf, glm::vec3{ 1, 0, 0 });
-    _camera.ubo.copy(_camera.matrices);
+    _camera.cameras[0].view = toMat4(observerPtr->getOrientationf());
+    _camera.cameras[0].view = glm::rotate(glm::mat4(), (float)interval * TAUf, glm::vec3{ 1, 0, 0 });
+    _camera.ubo.copy(_camera.cameras);
 
     uint32_t currentBuffer = _swapchain.acquireNextImage(_semaphores.acquireComplete).value;
 

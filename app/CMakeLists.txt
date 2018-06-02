@@ -8,7 +8,10 @@ add_executable(${TARGET_NAME} ${COMMON_SOURCES})
 add_dependencies(${TARGET_NAME} shaders)
 
 target_eigen()
-depend_libraries(celutil celastro celmath celephem celmodel celengine celapp vks)
+target_oculus()
+
+
+depend_libraries(celutil celastro celmath celephem celmodel celengine celapp vks xrs)
 target_qt(Core Gui)
 
 set(EXTRA_DEPLOY_OPTIONS "--qmldir  \"${CMAKE_CURRENT_SOURCE_DIR}/resources/qml\"")

@@ -809,7 +809,7 @@ void CelestiaCore::setRenderer(const RendererPtr& newRenderer) {
 void CelestiaCore::rotateObserver(const Quaternionf& rotation) {
     auto& observer = sim->getObserver();
     auto currentRotation = observer.getOrientationf();
-    currentRotation *= rotation;
+    currentRotation = currentRotation * rotation;
     currentRotation.normalize();
     observer.setOrientation(currentRotation.cast<double>());
 }

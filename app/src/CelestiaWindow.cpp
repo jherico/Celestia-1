@@ -3,18 +3,57 @@
 #include <QtGui/QMouseEvent>
 #include <celapp/celestiacore.h>
 #include "CelestiaVrApplication.h"
+#include <glm/glm.hpp>
 
 using namespace Eigen;
 
-static Quaternionf mouseDeltaToRotation(const QPointF& point) {
-    return Quaternionf(AngleAxisf(point.y() * -0.01f, Vector3f::UnitX()))  * Quaternionf(AngleAxisf(point.x() * 0.01f, Vector3f::UnitY()));
+static const int screen_width = 800;
+static const int screen_height = 600;
+
+/**
+* Get a normalized vector from the center of the virtual ball O to a
+* point P on the virtual ball surface, such that P is aligned on
+* screen's (X,Y) coordinates.  If (X,Y) is too far away from the
+* sphere, return the nearest point on the virtual ball surface.
+*/
+glm::vec3 get_arcball_vector(const QPointF& point) {
+    const auto x = point.x();
+    const auto y = point.y();
+    glm::vec3 P = glm::vec3(1.0f * x / screen_width * 2 - 1.0f, 1.0f * y / screen_height * 2 - 1.0f, 0);
+    P.y = -P.y;
+    float OP_squared = P.x * P.x + P.y * P.y;
+    if (OP_squared <= 1 * 1)
+        P.z = sqrt(1 * 1 - OP_squared);  // Pythagore
+    else
+        P = glm::normalize(P);  // nearest point
+    return P;
+}
+
+static Quaternionf mouseDeltaToRotation(const QPointF& point, const Quaternionf& currentOrientation) {
+    //static QPointF lastPoint{ screen_height / 2 , screen_width / 2 };
+    //glm::vec3 va = get_arcball_vector(lastPoint);
+    //glm::vec3 vb = get_arcball_vector(point);
+    //float angle = acosf(std::min(1.0f, glm::dot(va, vb)));
+    //glm::vec3 axis_in_camera_coord = glm::cross(va, vb);
+    //glm::mat3 camera2object = glm::inverse(glm::mat3(transforms[MODE_CAMERA]) * glm::mat3(mesh.object2world));
+    //glm::vec3 axis_in_object_coord = camera2object * axis_in_camera_coord;
+    //mesh.object2world = glm::rotate(mesh.object2world, glm::degrees(angle), axis_in_object_coord);
+    //lastPoint = point;
+    Vector3f startZ = currentOrientation * -Vector3f::UnitZ();
+    Vector3f newZ = startZ;
+    auto yaw = Quaternionf(AngleAxisf(point.x() * 0.01f, Vector3f::UnitY()));
+    newZ = yaw * newZ;
+    auto pitch = Quaternionf(AngleAxisf(point.y() * -0.01f, Vector3f::UnitX()));
+    newZ = pitch * newZ;
+    return Quaternionf::FromTwoVectors(startZ, newZ).normalized();
 }
 
 void CelestiaWindow::mouseMoveEvent(QMouseEvent* m) {
     Parent::mouseMoveEvent(m);
     QPointF deltaPos = m->windowPos() - _lastMouse;
     if (0 != (m->buttons() & Qt::MouseButton::LeftButton)) {
-        Eigen::Quaternionf rotation = mouseDeltaToRotation(deltaPos);
+        auto orientation = _celestiaCore->getSimulation()->getActiveObserver()->getOrientationf();
+        Eigen::Quaternionf rotation = mouseDeltaToRotation(deltaPos, orientation);
         _celestiaCore->rotateObserver(rotation);
     }
     _lastMouse = m->windowPos();
@@ -137,7 +176,7 @@ extern float fov;
 void CelestiaWindow::wheelEvent(QWheelEvent* w) {
     Parent::wheelEvent(w);
     auto delta = w->delta();
-        fov += (float)delta * 0.001f;
+    fov += (float)delta * 0.001f;
 #if 0 
     if (w->delta() > 0) {
         appCore->mouseWheel(-1.0f, 0);

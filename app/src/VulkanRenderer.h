@@ -6,6 +6,8 @@
 #include <vks/swapchain.hpp>
 #include <vks/texture.hpp>
 
+#include <OVR_CAPI_Vk.h>
+
 class QTimer;
 class QWindow;
 
@@ -59,10 +61,12 @@ private:
     } _semaphores;
 
     struct CameraData {
-        struct Matrices {
+        struct Camera {
             glm::mat4 projection;
             glm::mat4 view;
-        } matrices;
+        };
+        using CameraArray = std::array<Camera, 2>;
+        CameraArray cameras;
         vks::Buffer ubo;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorSet descriptorSet;

@@ -19,6 +19,6 @@ out gl_PerVertex {
 void main() {
     outColor = inColor;
     gl_PointSize = inPosAndSize.w;
-    gl_Position = camera.projection * camera.view * vec4(inPosAndSize.xyz, 1.0);
+    gl_Position = getProjection() * getView() * vec4(inPosAndSize.xyz, 1.0);
 }
 
